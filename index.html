@@ -57,6 +57,30 @@
   .search-box input::placeholder{ color:#9AA5A3; }
   .footer-notes{ font-size:9.5px; color:#B7C0BE; text-align:center; padding:14px 30px 30px; line-height:1.7; }
 
+  .search-wrap{ display:flex; flex-direction:column; gap:8px; }
+  .add-spot-btn{
+    display:flex; align-items:center; justify-content:center; gap:6px; width:100%;
+    padding:10px; border-radius:12px; border:1px dashed var(--ice); background:transparent;
+    color:#57625F; font-family:inherit; font-size:12.5px; font-weight:700; cursor:pointer;
+  }
+  .add-spot-btn:hover{ background:#F1F4F3; color:var(--forest); }
+  .add-spot-btn svg{ width:15px; height:15px; }
+
+  .add-spot-body{ padding:22px 18px 20px; text-align:left; }
+  .add-spot-title{ font-family:'Shippori Mincho', serif; font-size:18px; font-weight:700; color:var(--forest); margin-bottom:14px; }
+  .add-spot-label{ display:block; font-size:11px; font-weight:700; color:#7E8A88; margin:12px 0 5px; }
+  .add-spot-input{
+    width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--ice);
+    font-family:inherit; font-size:14px; outline:none; box-sizing:border-box; resize:vertical;
+  }
+  .add-spot-input:focus{ border-color:var(--biei-blue); }
+  .add-spot-submit{
+    width:100%; margin-top:18px; padding:12px; border-radius:12px; border:none;
+    background:var(--biei-blue); color:#fff; font-family:inherit; font-size:14px; font-weight:700; cursor:pointer;
+  }
+  .add-spot-submit:disabled{ opacity:0.6; }
+  .add-spot-status{ font-size:11.5px; color:#7E8A88; text-align:center; margin-top:10px; line-height:1.6; min-height:14px; }
+
   .tabs{ display:flex; gap:6px; padding:14px 16px 10px; overflow-x:auto; }
   .tab{
     flex:1; display:flex; flex-direction:column; align-items:center; gap:5px;
@@ -153,6 +177,7 @@
   }
   .icon-btn:hover{ background:#EFF4F3; color:var(--forest); }
   .icon-btn.has-photo{ color:#fff; border-color:transparent; }
+  .delete-spot-btn:hover{ background:#F6E5E1; color:#B5573B; }
   .icon-btn svg{ width:15px; height:15px; }
 
   /* ---------- 合言葉ゲート ---------- */
@@ -350,6 +375,10 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="#6B7A78" stroke-width="2"/><path d="M21 21l-4.3-4.3" stroke="#6B7A78" stroke-width="2" stroke-linecap="round"/></svg>
       <input id="searchInput" type="text" placeholder="スポット名・地域名で検索（例：美瑛、釧路、函館）">
     </div>
+    <button class="add-spot-btn" id="addSpotBtn">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      スポットを追加
+    </button>
   </div>
 
   <div class="list" id="list"></div>
@@ -368,6 +397,50 @@
   </div>
 </div>
 <input type="file" id="photoFileInput" accept="image/*" style="display:none">
+
+<div class="photo-modal" id="addSpotModal">
+  <div class="photo-modal-backdrop"></div>
+  <div class="photo-modal-content" style="max-width:380px;">
+    <button class="photo-modal-close" id="addSpotClose" aria-label="閉じる">✕</button>
+    <div class="add-spot-body">
+      <div class="add-spot-title">スポットを追加</div>
+      <label class="add-spot-label">カテゴリ</label>
+      <select id="spotCategory" class="add-spot-input">
+        <option value="scenic">絶景</option>
+        <option value="food">グルメ</option>
+        <option value="onsen">温泉</option>
+      </select>
+      <label class="add-spot-label">スポット名</label>
+      <input id="spotName" class="add-spot-input" type="text" placeholder="例：青い池">
+      <label class="add-spot-label">市町村</label>
+      <input id="spotArea" class="add-spot-input" type="text" placeholder="例：美瑛町">
+      <label class="add-spot-label">住所（地図の位置決めに使用）</label>
+      <input id="spotAddress" class="add-spot-input" type="text" placeholder="例：北海道上川郡美瑛町白金">
+      <label class="add-spot-label">紹介文</label>
+      <textarea id="spotDesc" class="add-spot-input" rows="3" placeholder="2行程度で簡単に紹介してください"></textarea>
+      <label class="add-spot-label">タグ（カンマ区切りで1〜2個）</label>
+      <input id="spotTags" class="add-spot-input" type="text" placeholder="例：写真映え, 神秘的">
+      <button class="add-spot-submit" id="spotSubmit">この内容で追加する</button>
+      <div class="add-spot-status" id="spotStatus"></div>
+    </div>
+  </div>
+</div>
+
+<div class="photo-modal" id="editSpotModal">
+  <div class="photo-modal-backdrop"></div>
+  <div class="photo-modal-content" style="max-width:380px;">
+    <button class="photo-modal-close" id="editSpotClose" aria-label="閉じる">✕</button>
+    <div class="add-spot-body">
+      <div class="add-spot-title">スポットを編集</div>
+      <label class="add-spot-label">スポット名</label>
+      <input id="editSpotName" class="add-spot-input" type="text">
+      <label class="add-spot-label">紹介文</label>
+      <textarea id="editSpotDesc" class="add-spot-input" rows="4"></textarea>
+      <button class="add-spot-submit" id="editSpotSubmit">保存する</button>
+      <div class="add-spot-status" id="editSpotStatus"></div>
+    </div>
+  </div>
+</div>
 
 <script>
 const REGIONS = {
@@ -559,6 +632,13 @@ const DATA = {
     ]
   }
 };
+
+// 定番スポットに、編集・削除の差分をひもづけるための固定キーをつけておく
+Object.keys(DATA).forEach(catKey=>{
+  DATA[catKey].items.forEach(it=>{ it._staticKey = catKey + '::' + it.name; });
+});
+// 上書き（編集・削除）が来る前の、まっさらな状態を保存しておく
+const ORIGINAL_DATA = JSON.parse(JSON.stringify(DATA));
 
 let currentCat = "scenic";
 let query = "";
@@ -861,6 +941,12 @@ function render(){
           <button class="icon-btn photo-btn${(it.photo || getStoredPhoto(catKey, idx)) ? ' has-photo' : ''}" data-cat="${catKey}" data-idx="${idx}" aria-label="写真を見る" title="写真を見る"${(it.photo || getStoredPhoto(catKey, idx)) ? ` style="background:${color};"` : ''}>
             <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="18" height="13" rx="2.5" stroke="currentColor" stroke-width="2"/><path d="M8 7l1.3-2h5.4L16 7" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13.5" r="3" stroke="currentColor" stroke-width="2"/></svg>
           </button>
+          <button class="icon-btn edit-spot-btn" data-cat="${catKey}" data-idx="${idx}" aria-label="編集" title="編集">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="icon-btn delete-spot-btn" data-cat="${catKey}" data-idx="${idx}" aria-label="削除" title="削除">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
         </div>
       </div>
       <div class="card-desc">${it.desc}</div>
@@ -966,6 +1052,160 @@ function startPhotoSync(){
 window.addEventListener('firebase-photos-ready', startPhotoSync);
 startPhotoSync();
 
+// ===== みんなでスポットを追加できる機能 =====
+
+// 実世界の緯度経度を、この地図のSVG座標に変換する（地図作成時と同じ投影法）
+function projectLatLon(lat, lon){
+  const minlon = 139.33434992193096, maxlat = 45.52295736;
+  const latCorr = 0.7261243734873808, SCALE = 90, minx = -6.0, miny = -6.0;
+  const x = (lon - minlon) * latCorr * SCALE - minx;
+  const y = (maxlat - lat) * SCALE - miny;
+  return { x: Math.round(x), y: Math.round(y) };
+}
+
+// 住所→緯度経度への変換（Nominatim：無料の住所検索サービス）
+async function geocodeAddress(address){
+  const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=jp&q=' + encodeURIComponent(address);
+  const res = await fetch(url, { headers: { 'Accept-Language': 'ja' } });
+  const data = await res.json();
+  if(!data || data.length === 0) return null;
+  return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+}
+
+// 座標から道南/道央/道北/道東を推定する
+function detectRegion(x, y){
+  let best = null, bestDist = Infinity;
+  Object.keys(REGION_BBOX).forEach(key=>{
+    const b = REGION_BBOX[key];
+    if(x>=b.minx && x<=b.maxx && y>=b.miny && y<=b.maxy){
+      const cx=(b.minx+b.maxx)/2, cy=(b.miny+b.maxy)/2;
+      const dist = Math.hypot(x-cx, y-cy);
+      if(dist < bestDist){ best = key; bestDist = dist; }
+    }
+  });
+  if(best) return best;
+  bestDist = Infinity;
+  Object.keys(REGION_BBOX).forEach(key=>{
+    const b = REGION_BBOX[key];
+    const cx=(b.minx+b.maxx)/2, cy=(b.miny+b.maxy)/2;
+    const dist = Math.hypot(x-cx, y-cy);
+    if(dist < bestDist){ best = key; bestDist = dist; }
+  });
+  return best;
+}
+
+// Firestoreから届いた「追加スポット」と「定番スポットへの編集・削除」を、まっさらな元データに重ね合わせる
+let cloudSpotsList = [];
+let spotOverrides = {};
+
+function rebuildData(){
+  Object.keys(ORIGINAL_DATA).forEach(catKey=>{
+    const rebuilt = ORIGINAL_DATA[catKey].items
+      .filter(it => !(spotOverrides[it._staticKey] && spotOverrides[it._staticKey].deleted))
+      .map(it=>{
+        const ov = spotOverrides[it._staticKey];
+        if(ov){
+          return { ...it, name: ov.name !== undefined ? ov.name : it.name, desc: ov.desc !== undefined ? ov.desc : it.desc };
+        }
+        return { ...it };
+      });
+    DATA[catKey].items = rebuilt;
+  });
+  cloudSpotsList.forEach(spot=>{
+    const cat = DATA[spot.category];
+    if(!cat) return;
+    cat.items.push({
+      name: spot.name, area: spot.area, region: spot.region,
+      x: spot.x, y: spot.y, desc: spot.desc, tags: spot.tags || [],
+      _cloudId: spot.id
+    });
+  });
+  render();
+}
+
+function startSpotSync(){
+  if(!window.firebaseSpots){
+    setTimeout(startSpotSync, 200);
+    return;
+  }
+  window.firebaseSpots.subscribe((list, err)=>{
+    if(err) return;
+    cloudSpotsList = list;
+    rebuildData();
+  });
+  window.firebaseSpots.subscribeOverrides((map, err)=>{
+    if(err) return;
+    spotOverrides = map;
+    rebuildData();
+  });
+}
+window.addEventListener('firebase-photos-ready', startSpotSync);
+startSpotSync();
+
+// スポット追加フォームのUI操作
+const addSpotModal = document.getElementById('addSpotModal');
+const addSpotBtn = document.getElementById('addSpotBtn');
+const addSpotClose = document.getElementById('addSpotClose');
+const spotSubmit = document.getElementById('spotSubmit');
+const spotStatus = document.getElementById('spotStatus');
+
+addSpotBtn.addEventListener('click', ()=> addSpotModal.classList.add('show'));
+addSpotClose.addEventListener('click', ()=> addSpotModal.classList.remove('show'));
+addSpotModal.querySelector('.photo-modal-backdrop').addEventListener('click', ()=> addSpotModal.classList.remove('show'));
+
+spotSubmit.addEventListener('click', async ()=>{
+  const category = document.getElementById('spotCategory').value;
+  const name = document.getElementById('spotName').value.trim();
+  const area = document.getElementById('spotArea').value.trim();
+  const address = document.getElementById('spotAddress').value.trim();
+  const desc = document.getElementById('spotDesc').value.trim();
+  const tagsRaw = document.getElementById('spotTags').value.trim();
+
+  if(!name || !area || !address){
+    spotStatus.textContent = 'スポット名・市町村・住所は必須です。';
+    return;
+  }
+
+  spotSubmit.disabled = true;
+  spotStatus.textContent = '住所から位置を調べています…';
+
+  try{
+    const geo = await geocodeAddress(address);
+    if(!geo){
+      spotStatus.textContent = '住所から場所が見つかりませんでした。もう少し詳しい住所でお試しください。';
+      spotSubmit.disabled = false;
+      return;
+    }
+    const { x, y } = projectLatLon(geo.lat, geo.lon);
+    const region = detectRegion(x, y);
+    const tags = tagsRaw ? tagsRaw.split(/[,、]/).map(t=>t.trim()).filter(Boolean).slice(0,3) : [];
+
+    if(!window.firebaseSpots){
+      spotStatus.textContent = 'クラウドの準備ができていません。少し待ってからもう一度お試しください。';
+      spotSubmit.disabled = false;
+      return;
+    }
+
+    await window.firebaseSpots.add({ category, name, area, region, x, y, desc, tags });
+
+    spotStatus.textContent = '追加しました！';
+    setTimeout(()=>{
+      addSpotModal.classList.remove('show');
+      document.getElementById('spotName').value = '';
+      document.getElementById('spotArea').value = '';
+      document.getElementById('spotAddress').value = '';
+      document.getElementById('spotDesc').value = '';
+      document.getElementById('spotTags').value = '';
+      spotStatus.textContent = '';
+      spotSubmit.disabled = false;
+    }, 900);
+  } catch(err){
+    console.warn('add spot failed', err);
+    spotStatus.textContent = '追加に失敗しました。通信環境を確認してもう一度お試しください。';
+    spotSubmit.disabled = false;
+  }
+});
+
 // 保存・通信量を抑えるため、長辺1280px・JPEG品質0.75程度に軽量化してからアップロードする
 function resizeImageFile(file, maxDim=1280, quality=0.75){
   return new Promise((resolve, reject)=>{
@@ -1053,7 +1293,13 @@ photoFileInput.addEventListener('change', (e)=>{
 document.getElementById('photoModalClose').addEventListener('click', closePhotoModal);
 photoModal.querySelector('.photo-modal-backdrop').addEventListener('click', closePhotoModal);
 
-listEl.addEventListener('click', (e)=>{
+let editingCatKey = null, editingIdx = null;
+const editSpotModal = document.getElementById('editSpotModal');
+const editSpotClose = document.getElementById('editSpotClose');
+const editSpotSubmit = document.getElementById('editSpotSubmit');
+const editSpotStatus = document.getElementById('editSpotStatus');
+
+listEl.addEventListener('click', async (e)=>{
   const pinBtn = e.target.closest('.pin-btn');
   if(pinBtn){
     jumpToMap(pinBtn.dataset.cat, Number(pinBtn.dataset.idx));
@@ -1062,6 +1308,78 @@ listEl.addEventListener('click', (e)=>{
   const photoBtn = e.target.closest('.photo-btn');
   if(photoBtn){
     openPhotoModal(photoBtn.dataset.cat, Number(photoBtn.dataset.idx));
+    return;
+  }
+  const editBtn = e.target.closest('.edit-spot-btn');
+  if(editBtn){
+    const catKey = editBtn.dataset.cat, idx = Number(editBtn.dataset.idx);
+    const it = DATA[catKey].items[idx];
+    if(!it) return;
+    editingCatKey = catKey; editingIdx = idx;
+    document.getElementById('editSpotName').value = it.name;
+    document.getElementById('editSpotDesc').value = it.desc;
+    editSpotStatus.textContent = '';
+    editSpotModal.classList.add('show');
+    return;
+  }
+  const deleteBtn = e.target.closest('.delete-spot-btn');
+  if(deleteBtn){
+    const catKey = deleteBtn.dataset.cat, idx = Number(deleteBtn.dataset.idx);
+    const it = DATA[catKey].items[idx];
+    if(!it) return;
+    if(!confirm(`「${it.name}」を削除しますか？\nこの操作は元に戻せません。`)) return;
+    if(!window.firebaseSpots){
+      alert('クラウドの準備ができていません。少し待ってからもう一度お試しください。');
+      return;
+    }
+    try{
+      if(it._cloudId){
+        await window.firebaseSpots.remove(it._cloudId);
+      } else {
+        await window.firebaseSpots.setOverride(it._staticKey, { deleted: true });
+      }
+    } catch(err){
+      console.warn('delete spot failed', err);
+      alert('削除に失敗しました。通信環境を確認してもう一度お試しください。');
+    }
+  }
+});
+
+editSpotClose.addEventListener('click', ()=> editSpotModal.classList.remove('show'));
+editSpotModal.querySelector('.photo-modal-backdrop').addEventListener('click', ()=> editSpotModal.classList.remove('show'));
+
+editSpotSubmit.addEventListener('click', async ()=>{
+  const name = document.getElementById('editSpotName').value.trim();
+  const desc = document.getElementById('editSpotDesc').value.trim();
+  if(!name || !desc){
+    editSpotStatus.textContent = 'スポット名・紹介文は必須です。';
+    return;
+  }
+  const it = DATA[editingCatKey] && DATA[editingCatKey].items[editingIdx];
+  if(!it) return;
+
+  if(!window.firebaseSpots){
+    editSpotStatus.textContent = 'クラウドの準備ができていません。少し待ってからもう一度お試しください。';
+    return;
+  }
+  editSpotSubmit.disabled = true;
+  editSpotStatus.textContent = '保存しています…';
+  try{
+    if(it._cloudId){
+      await window.firebaseSpots.update(it._cloudId, { name, desc });
+    } else {
+      await window.firebaseSpots.setOverride(it._staticKey, { name, desc });
+    }
+    editSpotStatus.textContent = '保存しました！';
+    setTimeout(()=>{
+      editSpotModal.classList.remove('show');
+      editSpotStatus.textContent = '';
+      editSpotSubmit.disabled = false;
+    }, 700);
+  } catch(err){
+    console.warn('edit spot failed', err);
+    editSpotStatus.textContent = '保存に失敗しました。通信環境を確認してもう一度お試しください。';
+    editSpotSubmit.disabled = false;
   }
 });
 
@@ -1118,6 +1436,42 @@ render();
           callback(map);
         }, (err)=>{
           console.warn('firestore subscribe error', err);
+          callback(null, err);
+        });
+      }
+    };
+
+    window.firebaseSpots = {
+      async add(spot){
+        const doc = await db.collection('spots').add({ ...spot, createdAt: Date.now() });
+        return doc.id;
+      },
+      async remove(id){
+        await db.collection('spots').doc(id).delete();
+      },
+      async update(id, patch){
+        await db.collection('spots').doc(id).update(patch);
+      },
+      async setOverride(key, patch){
+        await db.collection('spotOverrides').doc(key.replace(/\//g, '__')).set(patch, { merge: true });
+      },
+      subscribeOverrides(callback){
+        db.collection('spotOverrides').onSnapshot((snap)=>{
+          const map = {};
+          snap.forEach(d=>{ map[d.id.replace(/__/g, '/')] = d.data(); });
+          callback(map);
+        }, (err)=>{
+          console.warn('firestore overrides subscribe error', err);
+          callback(null, err);
+        });
+      },
+      subscribe(callback){
+        db.collection('spots').onSnapshot((snap)=>{
+          const list = [];
+          snap.forEach(d=>{ list.push({ id: d.id, ...d.data() }); });
+          callback(list);
+        }, (err)=>{
+          console.warn('firestore spots subscribe error', err);
           callback(null, err);
         });
       }
