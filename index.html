@@ -1670,13 +1670,16 @@ function generateItinerary(start, end, days, categories, mode, minutesPerDay){
   const routeSpots = pickRouteSpots(start, end, categories, poolSize);
 
   const dayPlans = [];
-  let idx = 0;
   for(let d=0; d<days; d++){
     const dayItems = [];
     let usedMinutes = 0;
     let cur = d===0 ? start : (dayPlans[d-1].length ? dayPlans[d-1][dayPlans[d-1].length-1] : start);
-    while(idx < routeSpots.length){
-      const sp = routeSpots[idx];
+    let dayHasOnsen = false;
+    let i = 0;
+    while(i < routeSpots.length){
+      const sp = routeSpots[i];
+      // 1日1温泉まで。既にあれば消費せずスキップし、翌日以降の候補として残す
+      if(sp.category === 'onsen' && dayHasOnsen){ i++; continue; }
       const km = distKm(cur, sp);
       const travel = travelMinutes(km, mode);
       const stay = STAY_MINUTES[sp.category] || 45;
@@ -1684,9 +1687,10 @@ function generateItinerary(start, end, days, categories, mode, minutesPerDay){
       if(minutesPerDay != null && usedMinutes + travel + stay > minutesPerDay) break;
       if(minutesPerDay == null && dayItems.length >= 3) break;
       dayItems.push({ ...sp, _travelKm: km, _travelMin: travel });
+      if(sp.category === 'onsen') dayHasOnsen = true;
       usedMinutes += travel + stay;
       cur = sp;
-      idx++;
+      routeSpots.splice(i, 1); // 使ったスポットだけ取り除く（スキップした温泉は残る）
     }
 
     // その日に温泉を訪れる場合は、なるべく一日の最後に入れる→並べ替え後の距離を計算し直す
@@ -1784,7 +1788,7 @@ function showPlanOnMap(){
     dayGeometries.forEach(geom=>{ if(geom) pts = pts.concat(geom); });
     const minx = Math.min(...pts.map(p=>p.x)), maxx = Math.max(...pts.map(p=>p.x));
     const miny = Math.min(...pts.map(p=>p.y)), maxy = Math.max(...pts.map(p=>p.y));
-    applyTransform({ minx, maxx, miny, maxy }, 1.3, 6);
+    applyTransform({ minx, maxx, miny, maxy }, 1.3, 11);
 
     drawPlanRouteOverlay(lastPlanRoute);
     document.getElementById('backToPlanBtn').classList.add('show');
@@ -1799,6 +1803,23 @@ document.getElementById('backToPlanBtn').addEventListener('click', ()=>{
   planFormView.style.display = 'none';
   planResultView.style.display = '';
 });
+
+// 近すぎる地点（重なって見づらいピン）を、少しずつ螺旋状にずらして見分けやすくする
+function spreadOverlappingStops(stops, minDist){
+  const placed = [];
+  stops.forEach(p=>{
+    let x = p.x, y = p.y, angle = 0, tries = 0;
+    while(placed.some(q => euclidDist(x, y, q.x, q.y) < minDist) && tries < 12){
+      angle += Math.PI / 5;
+      const r = minDist * (1 + Math.floor(tries / 10) * 0.6);
+      x = p.x + Math.cos(angle) * r;
+      y = p.y + Math.sin(angle) * r;
+      tries++;
+    }
+    placed.push({ ...p, x, y });
+  });
+  return placed;
+}
 
 function drawPlanRouteOverlay(route){
   const layer = document.getElementById('planRouteLayer');
@@ -1830,10 +1851,11 @@ function drawPlanRouteOverlay(route){
     layer.appendChild(path);
   });
 
-  // 通し番号つきのピン（起点・各スポット・終点）
+  // 通し番号つきのピン（起点・各スポット・終点）。近すぎる場所は少しずらして重なりを避ける
   let allStops = [{ ...start, _label: 'S' }];
   dayPlans.forEach(day=> day.forEach(it=> allStops.push(it)));
   allStops.push({ ...end, _label: 'G' });
+  allStops = spreadOverlappingStops(allStops, 3.2);
 
   allStops.forEach((p, i)=>{
     const label = p._label || String(i);
@@ -1842,8 +1864,8 @@ function drawPlanRouteOverlay(route){
     g.setAttribute('class', 'plan-route-pin');
     g.dataset.cx = p.x; g.dataset.cy = p.y;
     g.innerHTML = `
-      <circle cx="${p.x}" cy="${p.y}" r="7" fill="${isEndpoint ? '#232F29' : '#D64545'}" stroke="#fff" stroke-width="1.2"/>
-      <text x="${p.x}" y="${p.y}" text-anchor="middle" dominant-baseline="central" fill="#fff" font-size="7.5" font-weight="700">${label}</text>
+      <circle cx="${p.x}" cy="${p.y}" r="6" fill="${isEndpoint ? '#232F29' : '#D64545'}" stroke="#fff" stroke-width="1.1"/>
+      <text x="${p.x}" y="${p.y}" text-anchor="middle" dominant-baseline="central" fill="#fff" font-size="6.5" font-weight="700">${label}</text>
     `;
     layer.appendChild(g);
   });
