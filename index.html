@@ -93,6 +93,10 @@
   .plan-day-title{ font-family:'Shippori Mincho', serif; font-size:15px; font-weight:700; color:var(--forest); margin-bottom:8px; padding-bottom:4px; border-bottom:1px solid var(--ice); }
   .plan-spot{ display:flex; gap:10px; align-items:flex-start; padding:8px 0; border-bottom:1px dashed var(--ice); }
   .plan-spot:last-child{ border-bottom:none; }
+  .plan-spot-num{
+    width:18px; height:18px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    background:#232F29; color:#fff; font-size:10px; font-weight:700; margin-top:2px;
+  }
   .plan-spot-badge{ width:22px; height:22px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#fff; margin-top:1px; }
   .plan-spot-badge svg{ width:12px; height:12px; }
   .plan-spot-name{ font-size:13.5px; font-weight:700; color:var(--forest); }
@@ -500,6 +504,9 @@
         <option value="1">日帰り</option>
         <option value="2">1泊2日</option>
         <option value="3">2泊3日</option>
+        <option value="4">3泊4日</option>
+        <option value="5">4泊5日</option>
+        <option value="6">5泊6日</option>
       </select>
 
       <label class="add-spot-label">活動時間（任意・1日あたり）</label>
@@ -1722,7 +1729,7 @@ function generateItinerary(start, end, days, categories, mode, minutesPerDay){
 }
 
 function renderPlanResult(dayPlans, days, start, end, mode, usedRealRoad){
-  const title = days===1 ? '日帰りプラン' : days===2 ? '1泊2日プラン' : '2泊3日プラン';
+  const title = days===1 ? '日帰りプラン' : `${days-1}泊${days}日プラン`;
   document.getElementById('planResultTitle').textContent = title;
   const body = document.getElementById('planResultBody');
 
@@ -1733,6 +1740,7 @@ function renderPlanResult(dayPlans, days, start, end, mode, usedRealRoad){
       ? '※距離・時間は実際の道路経路に基づく概算です。'
       : '※距離・時間は直線距離をもとにした概算です（道路距離の取得に失敗したため）。';
     let html = `<div class="add-spot-status" style="margin-bottom:10px;">${noteText}</div>`;
+    let stopNumber = 0;
     html += dayPlans.map((dayItems, dIdx)=>{
       const dayLabel = dayPlans.length===1 ? '当日のおすすめコース' : `${dIdx+1}日目`;
       const startLabel = dIdx===0 ? (start.label || '起点') : `${dIdx}日目の宿`;
@@ -1741,11 +1749,13 @@ function renderPlanResult(dayPlans, days, start, end, mode, usedRealRoad){
         dayHtml += `<div class="add-spot-status" style="text-align:left; padding:6px 0;">この活動時間・移動手段では、無理なく立ち寄れる場所が見つかりませんでした。時間を延ばすか、車など別の移動手段もお試しください。</div>`;
       }
       dayItems.forEach(it=>{
+        stopNumber++;
         const color = CATEGORY_HEX[it.category];
         const hasPhoto = !!(it.photo || getStoredPhoto(it.category, it._idx));
         dayHtml += `
           <div class="plan-travel-line">${TRANSPORT_LABEL[mode]}で ${it._travelKm.toFixed(1)}km・約${formatMinutes(it._travelMin)}</div>
           <div class="plan-spot">
+            <div class="plan-spot-num">${stopNumber}</div>
             <div class="plan-spot-badge" style="background:${color}">${CATEGORY_ICON_SVG[it.category]}</div>
             <div style="flex:1;">
               <div class="plan-spot-name">${it.name}</div>
@@ -1809,14 +1819,13 @@ function spreadOverlappingStops(stops, minDist){
   const placed = [];
   stops.forEach(p=>{
     let x = p.x, y = p.y, angle = 0, tries = 0;
-    while(placed.some(q => euclidDist(x, y, q.x, q.y) < minDist) && tries < 12){
-      angle += Math.PI / 5;
-      const r = minDist * (1 + Math.floor(tries / 10) * 0.6);
-      x = p.x + Math.cos(angle) * r;
-      y = p.y + Math.sin(angle) * r;
+    while(placed.some(q => euclidDist(x, y, q.x, q.y) < minDist) && tries < 8){
+      angle += Math.PI / 4;
+      x = p.x + Math.cos(angle) * minDist;
+      y = p.y + Math.sin(angle) * minDist;
       tries++;
     }
-    placed.push({ ...p, x, y });
+    placed.push({ ...p, x, y, _origX: p.x, _origY: p.y });
   });
   return placed;
 }
@@ -1851,21 +1860,24 @@ function drawPlanRouteOverlay(route){
     layer.appendChild(path);
   });
 
-  // 通し番号つきのピン（起点・各スポット・終点）。近すぎる場所は少しずらして重なりを避ける
+  // 通し番号つきのピン（起点・各スポット・終点）。近すぎる場所は少しだけずらし、線で元の位置とつなぐ
   let allStops = [{ ...start, _label: 'S' }];
   dayPlans.forEach(day=> day.forEach(it=> allStops.push(it)));
   allStops.push({ ...end, _label: 'G' });
-  allStops = spreadOverlappingStops(allStops, 3.2);
+  allStops = spreadOverlappingStops(allStops, 2.2);
 
   allStops.forEach((p, i)=>{
     const label = p._label || String(i);
     const isEndpoint = p._label === 'S' || p._label === 'G';
+    const moved = p._origX !== p.x || p._origY !== p.y;
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     g.setAttribute('class', 'plan-route-pin');
     g.dataset.cx = p.x; g.dataset.cy = p.y;
     g.innerHTML = `
-      <circle cx="${p.x}" cy="${p.y}" r="6" fill="${isEndpoint ? '#232F29' : '#D64545'}" stroke="#fff" stroke-width="1.1"/>
-      <text x="${p.x}" y="${p.y}" text-anchor="middle" dominant-baseline="central" fill="#fff" font-size="6.5" font-weight="700">${label}</text>
+      ${moved ? `<line x1="${p._origX}" y1="${p._origY}" x2="${p.x}" y2="${p.y}" stroke="#232F29" stroke-width="0.6" vector-effect="non-scaling-stroke"/>
+      <circle cx="${p._origX}" cy="${p._origY}" r="1.6" fill="#232F29"/>` : ''}
+      <circle cx="${p.x}" cy="${p.y}" r="8" fill="${isEndpoint ? '#232F29' : '#D64545'}" stroke="#fff" stroke-width="1.3"/>
+      <text x="${p.x}" y="${p.y}" text-anchor="middle" dominant-baseline="central" fill="#fff" font-size="8.5" font-weight="700">${label}</text>
     `;
     layer.appendChild(g);
   });
