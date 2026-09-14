@@ -81,6 +81,24 @@
   .add-spot-submit:disabled{ opacity:0.6; }
   .add-spot-status{ font-size:11.5px; color:#7E8A88; text-align:center; margin-top:10px; line-height:1.6; min-height:14px; }
 
+  .plan-gps-btn{
+    width:42px; flex-shrink:0; border-radius:10px; border:1px solid var(--ice); background:#F7F9F8;
+    color:#57625F; display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .plan-gps-btn:hover{ background:#EFF4F3; color:var(--forest); }
+  .plan-cat-checks{ display:flex; gap:14px; margin-top:4px; }
+  .plan-cat-checks label{ display:flex; align-items:center; gap:5px; font-size:13px; color:#3A4442; }
+
+  .plan-day{ margin-bottom:18px; }
+  .plan-day-title{ font-family:'Shippori Mincho', serif; font-size:15px; font-weight:700; color:var(--forest); margin-bottom:8px; padding-bottom:4px; border-bottom:1px solid var(--ice); }
+  .plan-spot{ display:flex; gap:10px; align-items:flex-start; padding:8px 0; border-bottom:1px dashed var(--ice); }
+  .plan-spot:last-child{ border-bottom:none; }
+  .plan-spot-badge{ width:22px; height:22px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#fff; margin-top:1px; }
+  .plan-spot-badge svg{ width:12px; height:12px; }
+  .plan-spot-name{ font-size:13.5px; font-weight:700; color:var(--forest); }
+  .plan-spot-area{ font-size:10.5px; color:#8B978F; margin-top:1px; }
+  .plan-spot-desc{ font-size:11.5px; color:#57625F; margin-top:3px; line-height:1.5; }
+
   .tabs{ display:flex; gap:6px; padding:14px 16px 10px; overflow-x:auto; }
   .tab{
     flex:1; display:flex; flex-direction:column; align-items:center; gap:5px;
@@ -375,6 +393,10 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="#6B7A78" stroke-width="2"/><path d="M21 21l-4.3-4.3" stroke="#6B7A78" stroke-width="2" stroke-linecap="round"/></svg>
       <input id="searchInput" type="text" placeholder="スポット名・地域名で検索（例：美瑛、釧路、函館）">
     </div>
+    <button class="add-spot-btn" id="planBtn">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M9 3v4M15 3v4M4 8h16M6 5h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 13l2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      旅行プランを提案してもらう
+    </button>
     <button class="add-spot-btn" id="addSpotBtn">
       <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       スポットを追加
@@ -438,6 +460,48 @@
       <textarea id="editSpotDesc" class="add-spot-input" rows="4"></textarea>
       <button class="add-spot-submit" id="editSpotSubmit">保存する</button>
       <div class="add-spot-status" id="editSpotStatus"></div>
+    </div>
+  </div>
+</div>
+
+<div class="photo-modal" id="planModal">
+  <div class="photo-modal-backdrop"></div>
+  <div class="photo-modal-content" style="max-width:420px; max-height:85vh; overflow-y:auto;">
+    <button class="photo-modal-close" id="planClose" aria-label="閉じる">✕</button>
+    <div class="add-spot-body" id="planFormView">
+      <div class="add-spot-title">旅行プランを提案</div>
+
+      <label class="add-spot-label">出発地点</label>
+      <div style="display:flex; gap:8px;">
+        <input id="planAddress" class="add-spot-input" type="text" placeholder="例：女満別空港、札幌駅、現在地の住所" style="flex:1;">
+        <button id="planUseGps" class="plan-gps-btn" title="現在地を使う">
+          <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="add-spot-status" id="planGpsStatus" style="text-align:left; margin-top:4px;"></div>
+
+      <label class="add-spot-label">期間</label>
+      <select id="planDays" class="add-spot-input">
+        <option value="1">日帰り</option>
+        <option value="2">1泊2日</option>
+        <option value="3">2泊3日</option>
+      </select>
+
+      <label class="add-spot-label">行きたいジャンル</label>
+      <div class="plan-cat-checks">
+        <label><input type="checkbox" value="scenic" checked> 絶景</label>
+        <label><input type="checkbox" value="food" checked> グルメ</label>
+        <label><input type="checkbox" value="onsen" checked> 温泉</label>
+      </div>
+
+      <button class="add-spot-submit" id="planSubmit">この内容でプランを作る</button>
+      <div class="add-spot-status" id="planStatus"></div>
+    </div>
+
+    <div class="add-spot-body" id="planResultView" style="display:none;">
+      <div class="add-spot-title" id="planResultTitle">提案プラン</div>
+      <div id="planResultBody"></div>
+      <button class="add-spot-submit" id="planBackBtn" style="background:transparent; color:var(--biei-blue); border:1.5px solid var(--biei-blue);">条件を変えて作り直す</button>
     </div>
   </div>
 </div>
@@ -1381,6 +1445,176 @@ editSpotSubmit.addEventListener('click', async ()=>{
     editSpotStatus.textContent = '保存に失敗しました。通信環境を確認してもう一度お試しください。';
     editSpotSubmit.disabled = false;
   }
+});
+
+// ===== 旅行プラン提案モード =====
+const planModal = document.getElementById('planModal');
+const planBtn = document.getElementById('planBtn');
+const planClose = document.getElementById('planClose');
+const planFormView = document.getElementById('planFormView');
+const planResultView = document.getElementById('planResultView');
+const planStatus = document.getElementById('planStatus');
+const planGpsStatus = document.getElementById('planGpsStatus');
+const planSubmit = document.getElementById('planSubmit');
+const planBackBtn = document.getElementById('planBackBtn');
+let planStartPoint = null; // {x, y, label}
+
+function euclidDist(x1,y1,x2,y2){ return Math.hypot(x1-x2, y1-y2); }
+
+planBtn.addEventListener('click', ()=>{
+  planFormView.style.display = '';
+  planResultView.style.display = 'none';
+  planModal.classList.add('show');
+});
+planClose.addEventListener('click', ()=> planModal.classList.remove('show'));
+planModal.querySelector('.photo-modal-backdrop').addEventListener('click', ()=> planModal.classList.remove('show'));
+planBackBtn.addEventListener('click', ()=>{
+  planFormView.style.display = '';
+  planResultView.style.display = 'none';
+});
+
+document.getElementById('planUseGps').addEventListener('click', ()=>{
+  if(!navigator.geolocation){
+    planGpsStatus.textContent = 'この端末では現在地を取得できません。';
+    return;
+  }
+  planGpsStatus.textContent = '現在地を取得しています…';
+  navigator.geolocation.getCurrentPosition(
+    (pos)=>{
+      const { x, y } = projectLatLon(pos.coords.latitude, pos.coords.longitude);
+      planStartPoint = { x, y, label: '現在地' };
+      document.getElementById('planAddress').value = '';
+      document.getElementById('planAddress').placeholder = '現在地を使用します';
+      planGpsStatus.textContent = '現在地を取得しました。';
+    },
+    (err)=>{
+      console.warn('geolocation error', err);
+      planGpsStatus.textContent = '位置情報を取得できませんでした。位置情報の利用を許可しているかご確認ください。';
+    }
+  );
+});
+
+// 出発地点から近い順にスポットを絞り込み、貪欲法でルートを作って日数分に分割する
+function generateItinerary(startX, startY, days, categories){
+  let candidates = [];
+  categories.forEach(catKey=>{
+    DATA[catKey].items.forEach((it, idx)=>{
+      candidates.push({ ...it, category: catKey, _idx: idx });
+    });
+  });
+  if(candidates.length === 0) return [];
+
+  const countPerDay = 3;
+  const totalCount = Math.min(days * countPerDay, candidates.length);
+
+  candidates.sort((a,b)=> euclidDist(startX,startY,a.x,a.y) - euclidDist(startX,startY,b.x,b.y));
+  const pool = candidates.slice(0, Math.max(totalCount*4, 24));
+
+  const route = [];
+  let curX = startX, curY = startY;
+  const used = new Set();
+  for(let i=0; i<totalCount; i++){
+    let best = null, bestDist = Infinity, bestIdx = -1;
+    pool.forEach((sp, idx)=>{
+      if(used.has(idx)) return;
+      const d = euclidDist(curX, curY, sp.x, sp.y);
+      if(d < bestDist){ bestDist = d; best = sp; bestIdx = idx; }
+    });
+    if(!best) break;
+    used.add(bestIdx);
+    route.push(best);
+    curX = best.x; curY = best.y;
+  }
+
+  const dayPlans = [];
+  for(let d=0; d<days; d++){
+    dayPlans.push(route.slice(d*countPerDay, (d+1)*countPerDay));
+  }
+  // 宿泊が発生する日（最終日以外）は、その日の最後を温泉にする
+  if(categories.includes('onsen')){
+    for(let d=0; d<days-1; d++){
+      const dayItems = dayPlans[d];
+      const onsenIdx = dayItems.findIndex(it=>it.category==='onsen');
+      if(onsenIdx !== -1 && onsenIdx !== dayItems.length-1){
+        const [onsen] = dayItems.splice(onsenIdx,1);
+        dayItems.push(onsen);
+      }
+    }
+  }
+  return dayPlans.filter(d=>d.length>0);
+}
+
+function renderPlanResult(dayPlans, days){
+  const title = days===1 ? '日帰りプラン' : days===2 ? '1泊2日プラン' : '2泊3日プラン';
+  document.getElementById('planResultTitle').textContent = title;
+  const body = document.getElementById('planResultBody');
+
+  if(dayPlans.length === 0){
+    body.innerHTML = `<div class="add-spot-status">条件に合うスポットが見つかりませんでした。ジャンルを増やしてもう一度お試しください。</div>`;
+  } else {
+    body.innerHTML = dayPlans.map((dayItems, dIdx)=>{
+      const dayLabel = dayPlans.length===1 ? '当日のおすすめコース' : `${dIdx+1}日目`;
+      const spotsHtml = dayItems.map(it=>{
+        const color = CATEGORY_HEX[it.category];
+        return `
+          <div class="plan-spot">
+            <div class="plan-spot-badge" style="background:${color}">${CATEGORY_ICON_SVG[it.category]}</div>
+            <div>
+              <div class="plan-spot-name">${it.name}</div>
+              <div class="plan-spot-area">${it.area}</div>
+              <div class="plan-spot-desc">${it.desc}</div>
+            </div>
+          </div>`;
+      }).join('');
+      return `<div class="plan-day"><div class="plan-day-title">${dayLabel}</div>${spotsHtml}</div>`;
+    }).join('');
+  }
+
+  planFormView.style.display = 'none';
+  planResultView.style.display = '';
+}
+
+planSubmit.addEventListener('click', async ()=>{
+  const addressInput = document.getElementById('planAddress').value.trim();
+  const days = Number(document.getElementById('planDays').value);
+  const categories = Array.from(document.querySelectorAll('.plan-cat-checks input:checked')).map(el=>el.value);
+
+  if(categories.length === 0){
+    planStatus.textContent = 'ジャンルを1つ以上選んでください。';
+    return;
+  }
+
+  let start = planStartPoint;
+  if(addressInput){
+    planSubmit.disabled = true;
+    planStatus.textContent = '出発地点を調べています…';
+    try{
+      const geo = await geocodeAddress(addressInput);
+      if(!geo){
+        planStatus.textContent = '出発地点が見つかりませんでした。別の書き方でお試しください。';
+        planSubmit.disabled = false;
+        return;
+      }
+      const { x, y } = projectLatLon(geo.lat, geo.lon);
+      start = { x, y, label: addressInput };
+    } catch(err){
+      // このプレビュー環境では外部通信がブロックされることがあります。実際にホスティングして開いた際は問題なく動作します。
+      planStatus.textContent = '出発地点の取得に失敗しました。通信環境をご確認ください。';
+      planSubmit.disabled = false;
+      return;
+    }
+  }
+
+  if(!start){
+    planStatus.textContent = '出発地点を入力するか、現在地ボタンをお使いください。';
+    planSubmit.disabled = false;
+    return;
+  }
+
+  const dayPlans = generateItinerary(start.x, start.y, days, categories);
+  planStatus.textContent = '';
+  planSubmit.disabled = false;
+  renderPlanResult(dayPlans, days);
 });
 
 document.getElementById("tabs").addEventListener("click", (e)=>{
