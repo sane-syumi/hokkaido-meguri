@@ -231,6 +231,14 @@
     align-items:center; justify-content:center; padding:24px;
   }
   .photo-modal.show{ display:flex; }
+  #photoModal{ z-index:200; }
+  .back-to-plan-btn{
+    display:none; position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+    z-index:150; padding:12px 20px; border-radius:999px; border:none;
+    background:var(--forest); color:#fff; font-family:inherit; font-size:13px; font-weight:700;
+    box-shadow:0 6px 20px rgba(0,0,0,0.25); cursor:pointer;
+  }
+  .back-to-plan-btn.show{ display:block; }
   .photo-modal-backdrop{ position:absolute; inset:0; background:rgba(15,25,30,0.72); }
   .photo-modal-content{
     position:relative; background:var(--card); border-radius:18px; overflow:hidden;
@@ -467,6 +475,7 @@
   </div>
 </div>
 
+<button id="backToPlanBtn" class="back-to-plan-btn">📋 プランに戻る</button>
 <div class="photo-modal" id="planModal">
   <div class="photo-modal-backdrop"></div>
   <div class="photo-modal-content" style="max-width:420px; max-height:85vh; overflow-y:auto;">
@@ -935,6 +944,7 @@ function render(){
   const catColor = CATEGORY_HEX[currentCat];
   const planRouteLayer = document.getElementById('planRouteLayer');
   if(planRouteLayer) planRouteLayer.innerHTML = '';
+  document.getElementById('backToPlanBtn').classList.remove('show');
   const z = currentZoom();
   if(!z){
     mapLabel.innerHTML = `<span class="hint-text">エリアをタップしてください</span>`;
@@ -1579,8 +1589,14 @@ planBtn.addEventListener('click', ()=>{
   planResultView.style.display = 'none';
   planModal.classList.add('show');
 });
-planClose.addEventListener('click', ()=> planModal.classList.remove('show'));
-planModal.querySelector('.photo-modal-backdrop').addEventListener('click', ()=> planModal.classList.remove('show'));
+function closePlanModal(){
+  planModal.classList.remove('show');
+  if(lastPlanRoute && document.getElementById('planRouteLayer').children.length){
+    document.getElementById('backToPlanBtn').classList.add('show');
+  }
+}
+planClose.addEventListener('click', closePlanModal);
+planModal.querySelector('.photo-modal-backdrop').addEventListener('click', closePlanModal);
 planBackBtn.addEventListener('click', ()=>{
   planFormView.style.display = '';
   planResultView.style.display = 'none';
@@ -1771,9 +1787,18 @@ function showPlanOnMap(){
     applyTransform({ minx, maxx, miny, maxy }, 1.3, 6);
 
     drawPlanRouteOverlay(lastPlanRoute);
+    document.getElementById('backToPlanBtn').classList.add('show');
     document.querySelector('.map-wrap').scrollIntoView({behavior:'smooth', block:'start'});
   });
 }
+
+document.getElementById('backToPlanBtn').addEventListener('click', ()=>{
+  if(!lastPlanRoute) return;
+  planModal.classList.add('show');
+  document.getElementById('backToPlanBtn').classList.remove('show');
+  planFormView.style.display = 'none';
+  planResultView.style.display = '';
+});
 
 function drawPlanRouteOverlay(route){
   const layer = document.getElementById('planRouteLayer');
