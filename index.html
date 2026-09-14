@@ -1635,36 +1635,32 @@ function generateItinerary(start, end, days, categories, mode, minutesPerDay){
       const km = distKm(cur, sp);
       const travel = travelMinutes(km, mode);
       const stay = STAY_MINUTES[sp.category] || 45;
-      if(minutesPerDay != null && dayItems.length > 0 && usedMinutes + travel + stay > minutesPerDay) break;
+      // 1件目であっても、時間内に収まらないなら追加しない（歩き・自転車で遠すぎる場所を無理に入れない）
+      if(minutesPerDay != null && usedMinutes + travel + stay > minutesPerDay) break;
       if(minutesPerDay == null && dayItems.length >= 3) break;
       dayItems.push({ ...sp, _travelKm: km, _travelMin: travel });
       usedMinutes += travel + stay;
       cur = sp;
       idx++;
     }
-    dayPlans.push(dayItems);
-  }
-  // 時間指定で早めに打ち切られ、候補が余っている場合は最終日に詰め込む
-  if(idx < routeSpots.length && dayPlans.length>0){
-    const lastDay = dayPlans[dayPlans.length-1];
-    while(idx < routeSpots.length){
-      const sp = routeSpots[idx];
-      const cur = lastDay.length ? lastDay[lastDay.length-1] : start;
-      const km = distKm(cur, sp);
-      lastDay.push({ ...sp, _travelKm: km, _travelMin: travelMinutes(km, mode) });
-      idx++;
-    }
-  }
-  // 宿泊が発生する日（最終日以外）は、その日の最後を温泉にする
-  if(categories.includes('onsen')){
-    for(let d=0; d<days-1; d++){
-      const dayItems = dayPlans[d];
+
+    // 宿泊が発生する日（最終日以外）は、その日の最後を温泉にする→並べ替え後の距離を計算し直す
+    if(d < days-1 && categories.includes('onsen')){
       const onsenIdx = dayItems.findIndex(it=>it.category==='onsen');
       if(onsenIdx !== -1 && onsenIdx !== dayItems.length-1){
         const [onsen] = dayItems.splice(onsenIdx,1);
         dayItems.push(onsen);
+        let prevPt = d===0 ? start : (dayPlans[d-1] && dayPlans[d-1].length ? dayPlans[d-1][dayPlans[d-1].length-1] : start);
+        dayItems.forEach(it=>{
+          const km = distKm(prevPt, it);
+          it._travelKm = km;
+          it._travelMin = travelMinutes(km, mode);
+          prevPt = it;
+        });
       }
     }
+
+    dayPlans.push(dayItems);
   }
   // 最終日の最後から終点までの距離も付与
   const lastDay = dayPlans[dayPlans.length-1];
@@ -1673,7 +1669,7 @@ function generateItinerary(start, end, days, categories, mode, minutesPerDay){
     last._toEndKm = distKm(last, end);
     last._toEndMin = travelMinutes(last._toEndKm, mode);
   }
-  return dayPlans.filter(d=>d.length>0);
+  return dayPlans;
 }
 
 function renderPlanResult(dayPlans, days, start, end, mode, usedRealRoad){
@@ -1692,6 +1688,9 @@ function renderPlanResult(dayPlans, days, start, end, mode, usedRealRoad){
       const dayLabel = dayPlans.length===1 ? '当日のおすすめコース' : `${dIdx+1}日目`;
       const startLabel = dIdx===0 ? (start.label || '起点') : `${dIdx}日目の宿`;
       let dayHtml = `<div class="plan-route-point">📍 ${startLabel}</div>`;
+      if(dayItems.length === 0){
+        dayHtml += `<div class="add-spot-status" style="text-align:left; padding:6px 0;">この活動時間・移動手段では、無理なく立ち寄れる場所が見つかりませんでした。時間を延ばすか、車など別の移動手段もお試しください。</div>`;
+      }
       dayItems.forEach(it=>{
         const color = CATEGORY_HEX[it.category];
         dayHtml += `
