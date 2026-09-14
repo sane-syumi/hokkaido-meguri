@@ -98,6 +98,8 @@
   .plan-spot-name{ font-size:13.5px; font-weight:700; color:var(--forest); }
   .plan-spot-area{ font-size:10.5px; color:#8B978F; margin-top:1px; }
   .plan-spot-desc{ font-size:11.5px; color:#57625F; margin-top:3px; line-height:1.5; }
+  .plan-route-point{ font-size:12.5px; font-weight:700; color:var(--forest); padding:4px 0; }
+  .plan-travel-line{ font-size:10.5px; color:#8B978F; padding:3px 0 3px 4px; border-left:2px dotted var(--ice); margin-left:10px; }
 
   .tabs{ display:flex; gap:6px; padding:14px 16px 10px; overflow-x:auto; }
   .tab{
@@ -471,20 +473,38 @@
     <div class="add-spot-body" id="planFormView">
       <div class="add-spot-title">旅行プランを提案</div>
 
-      <label class="add-spot-label">出発地点</label>
+      <label class="add-spot-label">起点</label>
       <div style="display:flex; gap:8px;">
-        <input id="planAddress" class="add-spot-input" type="text" placeholder="例：女満別空港、札幌駅、現在地の住所" style="flex:1;">
+        <input id="planAddress" class="add-spot-input" type="text" placeholder="例：女満別空港、札幌駅" style="flex:1;">
         <button id="planUseGps" class="plan-gps-btn" title="現在地を使う">
           <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         </button>
       </div>
       <div class="add-spot-status" id="planGpsStatus" style="text-align:left; margin-top:4px;"></div>
 
+      <label class="add-spot-label">終点（空欄なら起点と同じ場所に戻ります）</label>
+      <input id="planEndAddress" class="add-spot-input" type="text" placeholder="例：新千歳空港">
+
       <label class="add-spot-label">期間</label>
       <select id="planDays" class="add-spot-input">
         <option value="1">日帰り</option>
         <option value="2">1泊2日</option>
         <option value="3">2泊3日</option>
+      </select>
+
+      <label class="add-spot-label">活動時間（任意・1日あたり）</label>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <input id="planTimeStart" class="add-spot-input" type="time" value="09:00" style="flex:1;">
+        <span style="color:#8B978F;">〜</span>
+        <input id="planTimeEnd" class="add-spot-input" type="time" value="18:00" style="flex:1;">
+      </div>
+
+      <label class="add-spot-label">移動手段</label>
+      <select id="planMode" class="add-spot-input">
+        <option value="car">車</option>
+        <option value="train">電車</option>
+        <option value="bicycle">自転車</option>
+        <option value="walk">徒歩</option>
       </select>
 
       <label class="add-spot-label">行きたいジャンル</label>
@@ -1127,6 +1147,15 @@ function projectLatLon(lat, lon){
   return { x: Math.round(x), y: Math.round(y) };
 }
 
+// SVG座標→緯度経度への逆変換（道路経路のAPI呼び出し用）
+function unprojectXY(x, y){
+  const minlon = 139.33434992193096, maxlat = 45.52295736;
+  const latCorr = 0.7261243734873808, SCALE = 90, minx = -6.0, miny = -6.0;
+  const lon = (x + minx) / (latCorr * SCALE) + minlon;
+  const lat = maxlat - (y + miny) / SCALE;
+  return { lat, lon };
+}
+
 // 住所→緯度経度への変換（Nominatim：無料の住所検索サービス）
 async function geocodeAddress(address){
   const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=jp&q=' + encodeURIComponent(address);
@@ -1461,6 +1490,79 @@ let planStartPoint = null; // {x, y, label}
 
 function euclidDist(x1,y1,x2,y2){ return Math.hypot(x1-x2, y1-y2); }
 
+const TRANSPORT_SPEED_KMH = { car: 45, train: 40, bicycle: 15, walk: 4.5 };
+const TRANSPORT_LABEL = { car: '車', train: '電車', bicycle: '自転車', walk: '徒歩' };
+const KM_PER_UNIT = 111.32 / 90; // 地図の座標1単位あたりの実距離（km）
+const ROAD_FACTOR = 1.3;         // 直線距離→実際の道のりへのおおよその補正
+const STAY_MINUTES = { scenic: 45, food: 60, onsen: 60 };
+
+// 実際の道路距離・所要時間の取得（OSRM：無料の経路探索サービス。電車は道路網がないため非対応）
+const OSRM_BASE = {
+  car: 'https://routing.openstreetmap.de/routed-car/route/v1/driving/',
+  bicycle: 'https://routing.openstreetmap.de/routed-bike/route/v1/bike/',
+  walk: 'https://routing.openstreetmap.de/routed-foot/route/v1/foot/'
+};
+
+async function fetchRoadLegs(points, mode){
+  const base = OSRM_BASE[mode];
+  if(!base || points.length < 2) return null;
+  try{
+    const coordStr = points.map(p=>{
+      const { lat, lon } = unprojectXY(p.x, p.y);
+      return `${lon.toFixed(5)},${lat.toFixed(5)}`;
+    }).join(';');
+    const res = await fetch(base + coordStr + '?overview=false');
+    if(!res.ok) return null;
+    const data = await res.json();
+    if(!data.routes || !data.routes[0] || !data.routes[0].legs) return null;
+    return data.routes[0].legs.map(leg=>({ km: leg.distance/1000, min: leg.duration/60 }));
+  } catch(err){
+    // OSRMが混雑・利用不可の場合は、既に計算済みの概算距離をそのまま使う
+    return null;
+  }
+}
+
+// 日ごとに実際の道路距離を取得し、直線距離の概算値を実測値に置き換える
+async function refineWithRoadDistances(dayPlans, start, end, mode){
+  if(!OSRM_BASE[mode]) return false; // 電車は概算のまま
+  let anySuccess = false;
+  for(let d=0; d<dayPlans.length; d++){
+    const dayItems = dayPlans[d];
+    if(dayItems.length === 0) continue;
+    const isLastDay = d === dayPlans.length-1;
+    const dayStart = d===0 ? start : (dayPlans[d-1].length ? dayPlans[d-1][dayPlans[d-1].length-1] : start);
+    const points = [dayStart, ...dayItems];
+    if(isLastDay) points.push(end);
+    const legs = await fetchRoadLegs(points, mode);
+    if(!legs) continue;
+    dayItems.forEach((it, i)=>{
+      if(legs[i]){ it._travelKm = legs[i].km; it._travelMin = legs[i].min; }
+    });
+    if(isLastDay && legs[dayItems.length]){
+      const last = dayItems[dayItems.length-1];
+      last._toEndKm = legs[dayItems.length].km;
+      last._toEndMin = legs[dayItems.length].min;
+    }
+    anySuccess = true;
+  }
+  return anySuccess;
+}
+
+
+function distKm(a, b){ return euclidDist(a.x, a.y, b.x, b.y) * KM_PER_UNIT * ROAD_FACTOR; }
+function travelMinutes(km, mode){ return km / (TRANSPORT_SPEED_KMH[mode] || TRANSPORT_SPEED_KMH.car) * 60; }
+function formatMinutes(min){
+  min = Math.round(min);
+  if(min < 60) return `${min}分`;
+  const h = Math.floor(min/60), m = min%60;
+  return m>0 ? `${h}時間${m}分` : `${h}時間`;
+}
+function timeToMinutes(hhmm){
+  if(!hhmm) return null;
+  const [h,m] = hhmm.split(':').map(Number);
+  return h*60+m;
+}
+
 planBtn.addEventListener('click', ()=>{
   planFormView.style.display = '';
   planResultView.style.display = 'none';
@@ -1494,41 +1596,65 @@ document.getElementById('planUseGps').addEventListener('click', ()=>{
   );
 });
 
-// 出発地点から近い順にスポットを絞り込み、貪欲法でルートを作って日数分に分割する
-function generateItinerary(startX, startY, days, categories){
+// 起点・終点から遠回りの少ないスポットを選び、起点→終点の向きに沿って並べる
+function pickRouteSpots(start, end, categories, poolSize){
   let candidates = [];
   categories.forEach(catKey=>{
-    DATA[catKey].items.forEach((it, idx)=>{
-      candidates.push({ ...it, category: catKey, _idx: idx });
+    DATA[catKey].items.forEach((it)=>{
+      candidates.push({ ...it, category: catKey });
     });
   });
   if(candidates.length === 0) return [];
 
-  const countPerDay = 3;
-  const totalCount = Math.min(days * countPerDay, candidates.length);
+  const baseDist = euclidDist(start.x,start.y,end.x,end.y);
+  candidates.forEach(c=>{
+    c._detour = euclidDist(start.x,start.y,c.x,c.y) + euclidDist(c.x,c.y,end.x,end.y) - baseDist;
+  });
+  candidates.sort((a,b)=> a._detour - b._detour);
+  const chosen = candidates.slice(0, Math.min(poolSize, candidates.length));
 
-  candidates.sort((a,b)=> euclidDist(startX,startY,a.x,a.y) - euclidDist(startX,startY,b.x,b.y));
-  const pool = candidates.slice(0, Math.max(totalCount*4, 24));
+  const dx = end.x-start.x, dy = end.y-start.y;
+  const len2 = (dx*dx+dy*dy) || 1;
+  chosen.forEach(c=>{ c._t = ((c.x-start.x)*dx + (c.y-start.y)*dy) / len2; });
+  chosen.sort((a,b)=> a._t - b._t);
+  return chosen;
+}
 
-  const route = [];
-  let curX = startX, curY = startY;
-  const used = new Set();
-  for(let i=0; i<totalCount; i++){
-    let best = null, bestDist = Infinity, bestIdx = -1;
-    pool.forEach((sp, idx)=>{
-      if(used.has(idx)) return;
-      const d = euclidDist(curX, curY, sp.x, sp.y);
-      if(d < bestDist){ bestDist = d; best = sp; bestIdx = idx; }
-    });
-    if(!best) break;
-    used.add(bestIdx);
-    route.push(best);
-    curX = best.x; curY = best.y;
-  }
+// 日数・活動時間・移動手段をもとに、日ごとにスポットを割り振り、移動距離／時間も付与する
+function generateItinerary(start, end, days, categories, mode, minutesPerDay){
+  const poolSize = minutesPerDay != null ? days*8 : days*3;
+  const routeSpots = pickRouteSpots(start, end, categories, poolSize);
 
   const dayPlans = [];
+  let idx = 0;
   for(let d=0; d<days; d++){
-    dayPlans.push(route.slice(d*countPerDay, (d+1)*countPerDay));
+    const dayItems = [];
+    let usedMinutes = 0;
+    let cur = d===0 ? start : (dayPlans[d-1].length ? dayPlans[d-1][dayPlans[d-1].length-1] : start);
+    while(idx < routeSpots.length){
+      const sp = routeSpots[idx];
+      const km = distKm(cur, sp);
+      const travel = travelMinutes(km, mode);
+      const stay = STAY_MINUTES[sp.category] || 45;
+      if(minutesPerDay != null && dayItems.length > 0 && usedMinutes + travel + stay > minutesPerDay) break;
+      if(minutesPerDay == null && dayItems.length >= 3) break;
+      dayItems.push({ ...sp, _travelKm: km, _travelMin: travel });
+      usedMinutes += travel + stay;
+      cur = sp;
+      idx++;
+    }
+    dayPlans.push(dayItems);
+  }
+  // 時間指定で早めに打ち切られ、候補が余っている場合は最終日に詰め込む
+  if(idx < routeSpots.length && dayPlans.length>0){
+    const lastDay = dayPlans[dayPlans.length-1];
+    while(idx < routeSpots.length){
+      const sp = routeSpots[idx];
+      const cur = lastDay.length ? lastDay[lastDay.length-1] : start;
+      const km = distKm(cur, sp);
+      lastDay.push({ ...sp, _travelKm: km, _travelMin: travelMinutes(km, mode) });
+      idx++;
+    }
   }
   // 宿泊が発生する日（最終日以外）は、その日の最後を温泉にする
   if(categories.includes('onsen')){
@@ -1541,10 +1667,17 @@ function generateItinerary(startX, startY, days, categories){
       }
     }
   }
+  // 最終日の最後から終点までの距離も付与
+  const lastDay = dayPlans[dayPlans.length-1];
+  if(lastDay && lastDay.length){
+    const last = lastDay[lastDay.length-1];
+    last._toEndKm = distKm(last, end);
+    last._toEndMin = travelMinutes(last._toEndKm, mode);
+  }
   return dayPlans.filter(d=>d.length>0);
 }
 
-function renderPlanResult(dayPlans, days){
+function renderPlanResult(dayPlans, days, start, end, mode, usedRealRoad){
   const title = days===1 ? '日帰りプラン' : days===2 ? '1泊2日プラン' : '2泊3日プラン';
   document.getElementById('planResultTitle').textContent = title;
   const body = document.getElementById('planResultBody');
@@ -1552,11 +1685,20 @@ function renderPlanResult(dayPlans, days){
   if(dayPlans.length === 0){
     body.innerHTML = `<div class="add-spot-status">条件に合うスポットが見つかりませんでした。ジャンルを増やしてもう一度お試しください。</div>`;
   } else {
-    body.innerHTML = dayPlans.map((dayItems, dIdx)=>{
+    const noteText = usedRealRoad
+      ? '※距離・時間は実際の道路経路に基づく概算です。'
+      : mode==='train'
+        ? '※電車は道路経路が使えないため、直線距離をもとにした概算です。'
+        : '※距離・時間は直線距離をもとにした概算です（道路距離の取得に失敗したため）。';
+    let html = `<div class="add-spot-status" style="margin-bottom:10px;">${noteText}</div>`;
+    html += dayPlans.map((dayItems, dIdx)=>{
       const dayLabel = dayPlans.length===1 ? '当日のおすすめコース' : `${dIdx+1}日目`;
-      const spotsHtml = dayItems.map(it=>{
+      const startLabel = dIdx===0 ? (start.label || '起点') : `${dIdx}日目の宿`;
+      let dayHtml = `<div class="plan-route-point">📍 ${startLabel}</div>`;
+      dayItems.forEach(it=>{
         const color = CATEGORY_HEX[it.category];
-        return `
+        dayHtml += `
+          <div class="plan-travel-line">${TRANSPORT_LABEL[mode]}で ${it._travelKm.toFixed(1)}km・約${formatMinutes(it._travelMin)}</div>
           <div class="plan-spot">
             <div class="plan-spot-badge" style="background:${color}">${CATEGORY_ICON_SVG[it.category]}</div>
             <div>
@@ -1565,18 +1707,38 @@ function renderPlanResult(dayPlans, days){
               <div class="plan-spot-desc">${it.desc}</div>
             </div>
           </div>`;
-      }).join('');
-      return `<div class="plan-day"><div class="plan-day-title">${dayLabel}</div>${spotsHtml}</div>`;
+      });
+      if(dIdx === dayPlans.length-1){
+        const last = dayItems[dayItems.length-1];
+        if(last && last._toEndKm != null){
+          dayHtml += `<div class="plan-travel-line">${TRANSPORT_LABEL[mode]}で ${last._toEndKm.toFixed(1)}km・約${formatMinutes(last._toEndMin)}</div>`;
+        }
+        dayHtml += `<div class="plan-route-point">📍 ${end.label || '終点'}</div>`;
+      }
+      return `<div class="plan-day"><div class="plan-day-title">${dayLabel}</div>${dayHtml}</div>`;
     }).join('');
+    body.innerHTML = html;
   }
 
   planFormView.style.display = 'none';
   planResultView.style.display = '';
 }
 
+async function resolvePoint(addressInput, fallback){
+  if(!addressInput) return fallback;
+  const geo = await geocodeAddress(addressInput);
+  if(!geo) return null;
+  const { x, y } = projectLatLon(geo.lat, geo.lon);
+  return { x, y, label: addressInput };
+}
+
 planSubmit.addEventListener('click', async ()=>{
   const addressInput = document.getElementById('planAddress').value.trim();
+  const endAddressInput = document.getElementById('planEndAddress').value.trim();
   const days = Number(document.getElementById('planDays').value);
+  const mode = document.getElementById('planMode').value;
+  const timeStart = timeToMinutes(document.getElementById('planTimeStart').value);
+  const timeEnd = timeToMinutes(document.getElementById('planTimeEnd').value);
   const categories = Array.from(document.querySelectorAll('.plan-cat-checks input:checked')).map(el=>el.value);
 
   if(categories.length === 0){
@@ -1584,37 +1746,52 @@ planSubmit.addEventListener('click', async ()=>{
     return;
   }
 
-  let start = planStartPoint;
-  if(addressInput){
-    planSubmit.disabled = true;
-    planStatus.textContent = '出発地点を調べています…';
-    try{
-      const geo = await geocodeAddress(addressInput);
-      if(!geo){
-        planStatus.textContent = '出発地点が見つかりませんでした。別の書き方でお試しください。';
-        planSubmit.disabled = false;
-        return;
-      }
-      const { x, y } = projectLatLon(geo.lat, geo.lon);
-      start = { x, y, label: addressInput };
-    } catch(err){
-      // このプレビュー環境では外部通信がブロックされることがあります。実際にホスティングして開いた際は問題なく動作します。
-      planStatus.textContent = '出発地点の取得に失敗しました。通信環境をご確認ください。';
+  planSubmit.disabled = true;
+  planStatus.textContent = '起点・終点を調べています…';
+
+  let start, end;
+  try{
+    start = await resolvePoint(addressInput, planStartPoint);
+    if(!start){
+      planStatus.textContent = '起点が見つかりませんでした。別の書き方でお試しください。';
       planSubmit.disabled = false;
       return;
     }
-  }
-
-  if(!start){
-    planStatus.textContent = '出発地点を入力するか、現在地ボタンをお使いください。';
+    end = endAddressInput ? await resolvePoint(endAddressInput, null) : start;
+    if(!end){
+      planStatus.textContent = '終点が見つかりませんでした。別の書き方でお試しください。';
+      planSubmit.disabled = false;
+      return;
+    }
+  } catch(err){
+    // このプレビュー環境では外部通信がブロックされることがあります。実際にホスティングして開いた際は問題なく動作します。
+    planStatus.textContent = '起点・終点の取得に失敗しました。通信環境をご確認ください。';
     planSubmit.disabled = false;
     return;
   }
 
-  const dayPlans = generateItinerary(start.x, start.y, days, categories);
+  if(!start){
+    planStatus.textContent = '起点を入力するか、現在地ボタンをお使いください。';
+    planSubmit.disabled = false;
+    return;
+  }
+
+  let minutesPerDay = null;
+  if(timeStart != null && timeEnd != null && timeEnd > timeStart){
+    minutesPerDay = timeEnd - timeStart;
+  }
+
+  const dayPlans = generateItinerary(start, end, days, categories, mode, minutesPerDay);
+
+  let usedRealRoad = false;
+  if(dayPlans.length > 0 && OSRM_BASE[mode]){
+    planStatus.textContent = '道路距離を調べています…';
+    usedRealRoad = await refineWithRoadDistances(dayPlans, start, end, mode);
+  }
+
   planStatus.textContent = '';
   planSubmit.disabled = false;
-  renderPlanResult(dayPlans, days);
+  renderPlanResult(dayPlans, days, start, end, mode, usedRealRoad);
 });
 
 document.getElementById("tabs").addEventListener("click", (e)=>{
