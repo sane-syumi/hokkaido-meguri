@@ -385,6 +385,7 @@
   <text class="region-label" x="69.6" y="320.9">道南</text>
 </g>
         <g id="pinLayer"></g>
+        <g id="planRouteLayer"></g>
       </g>
     </svg>
     <div class="map-hint" id="mapHint">エリアをタップすると拡大してスポットが表示されます</div>
@@ -520,6 +521,7 @@
     <div class="add-spot-body" id="planResultView" style="display:none;">
       <div class="add-spot-title" id="planResultTitle">提案プラン</div>
       <div id="planResultBody"></div>
+      <button class="add-spot-submit plan-map-btn" style="margin-top:10px;">🗺 ルートを地図で見る</button>
       <button class="add-spot-submit" id="planBackBtn" style="background:transparent; color:var(--biei-blue); border:1.5px solid var(--biei-blue);">条件を変えて作り直す</button>
     </div>
   </div>
@@ -753,6 +755,7 @@ function setTransform(scale, tx, ty, animated){
     zoomGroup.style.transition = '';
   }
   updatePinTransforms();
+  updatePlanRoutePinTransforms();
 }
 
 // ピンは常に画面上で一定サイズになるよう、地図の拡大率の逆数をかけて打ち消す。
@@ -930,6 +933,8 @@ const CATEGORY_ICON_SVG = {
 function render(){
   const cat = DATA[currentCat];
   const catColor = CATEGORY_HEX[currentCat];
+  const planRouteLayer = document.getElementById('planRouteLayer');
+  if(planRouteLayer) planRouteLayer.innerHTML = '';
   const z = currentZoom();
   if(!z){
     mapLabel.innerHTML = `<span class="hint-text">エリアをタップしてください</span>`;
@@ -1486,6 +1491,7 @@ const planGpsStatus = document.getElementById('planGpsStatus');
 const planSubmit = document.getElementById('planSubmit');
 const planBackBtn = document.getElementById('planBackBtn');
 let planStartPoint = null; // {x, y, label}
+let lastPlanRoute = null; // 直近に作成したプラン（地図表示用に保持）
 
 function euclidDist(x1,y1,x2,y2){ return Math.hypot(x1-x2, y1-y2); }
 
@@ -1510,20 +1516,24 @@ async function fetchRoadLegs(points, mode){
       const { lat, lon } = unprojectXY(p.x, p.y);
       return `${lon.toFixed(5)},${lat.toFixed(5)}`;
     }).join(';');
-    const res = await fetch(base + coordStr + '?overview=false');
+    const res = await fetch(base + coordStr + '?overview=full&geometries=geojson');
     if(!res.ok) return null;
     const data = await res.json();
     if(!data.routes || !data.routes[0] || !data.routes[0].legs) return null;
-    return data.routes[0].legs.map(leg=>({ km: leg.distance/1000, min: leg.duration/60 }));
+    const legs = data.routes[0].legs.map(leg=>({ km: leg.distance/1000, min: leg.duration/60 }));
+    const coords = data.routes[0].geometry && data.routes[0].geometry.coordinates;
+    const geometry = coords ? coords.map(([lon, lat])=> projectLatLon(lat, lon)) : null;
+    return { legs, geometry };
   } catch(err){
     // OSRMが混雑・利用不可の場合は、既に計算済みの概算距離をそのまま使う
     return null;
   }
 }
 
-// 日ごとに実際の道路距離を取得し、直線距離の概算値を実測値に置き換える
+// 日ごとに実際の道路距離を取得し、直線距離の概算値を実測値に置き換える。地図表示用のルート線も収集する
 async function refineWithRoadDistances(dayPlans, start, end, mode){
-  if(!OSRM_BASE[mode]) return false; // 電車は概算のまま
+  const dayGeometries = dayPlans.map(()=>null);
+  if(!OSRM_BASE[mode]) return { success: false, dayGeometries }; // 対応していない移動手段は概算のまま
   let anySuccess = false;
   for(let d=0; d<dayPlans.length; d++){
     const dayItems = dayPlans[d];
@@ -1532,8 +1542,9 @@ async function refineWithRoadDistances(dayPlans, start, end, mode){
     const dayStart = d===0 ? start : (dayPlans[d-1].length ? dayPlans[d-1][dayPlans[d-1].length-1] : start);
     const points = [dayStart, ...dayItems];
     if(isLastDay) points.push(end);
-    const legs = await fetchRoadLegs(points, mode);
-    if(!legs) continue;
+    const result = await fetchRoadLegs(points, mode);
+    if(!result) continue;
+    const { legs, geometry } = result;
     dayItems.forEach((it, i)=>{
       if(legs[i]){ it._travelKm = legs[i].km; it._travelMin = legs[i].min; }
     });
@@ -1542,9 +1553,10 @@ async function refineWithRoadDistances(dayPlans, start, end, mode){
       last._toEndKm = legs[dayItems.length].km;
       last._toEndMin = legs[dayItems.length].min;
     }
+    dayGeometries[d] = geometry;
     anySuccess = true;
   }
-  return anySuccess;
+  return { success: anySuccess, dayGeometries };
 }
 
 
@@ -1573,6 +1585,13 @@ planBackBtn.addEventListener('click', ()=>{
   planFormView.style.display = '';
   planResultView.style.display = 'none';
 });
+document.getElementById('planResultBody').addEventListener('click', (e)=>{
+  const photoBtn = e.target.closest('.plan-photo-btn');
+  if(photoBtn){
+    openPhotoModal(photoBtn.dataset.cat, Number(photoBtn.dataset.idx));
+  }
+});
+document.querySelector('.plan-map-btn').addEventListener('click', ()=> showPlanOnMap());
 
 document.getElementById('planUseGps').addEventListener('click', ()=>{
   if(!navigator.geolocation){
@@ -1599,8 +1618,8 @@ document.getElementById('planUseGps').addEventListener('click', ()=>{
 function pickRouteSpots(start, end, categories, poolSize){
   let candidates = [];
   categories.forEach(catKey=>{
-    DATA[catKey].items.forEach((it)=>{
-      candidates.push({ ...it, category: catKey });
+    DATA[catKey].items.forEach((it, idx)=>{
+      candidates.push({ ...it, category: catKey, _idx: idx });
     });
   });
   if(candidates.length === 0) return [];
@@ -1612,11 +1631,21 @@ function pickRouteSpots(start, end, categories, poolSize){
   candidates.sort((a,b)=> a._detour - b._detour);
   const chosen = candidates.slice(0, Math.min(poolSize, candidates.length));
 
-  const dx = end.x-start.x, dy = end.y-start.y;
-  const len2 = (dx*dx+dy*dy) || 1;
-  chosen.forEach(c=>{ c._t = ((c.x-start.x)*dx + (c.y-start.y)*dy) / len2; });
-  chosen.sort((a,b)=> a._t - b._t);
-  return chosen;
+  // 近い場所をまとめて回る一筆書きになるよう、最近傍法で順番を組み立てる
+  const ordered = [];
+  let cur = start;
+  const remaining = chosen.slice();
+  while(remaining.length){
+    let bestIdx = 0, bestDist = Infinity;
+    remaining.forEach((c, i)=>{
+      const d = euclidDist(cur.x, cur.y, c.x, c.y);
+      if(d < bestDist){ bestDist = d; bestIdx = i; }
+    });
+    const next = remaining.splice(bestIdx, 1)[0];
+    ordered.push(next);
+    cur = next;
+  }
+  return ordered;
 }
 
 // 日数・活動時間・移動手段をもとに、日ごとにスポットを割り振り、移動距離／時間も付与する
@@ -1644,8 +1673,8 @@ function generateItinerary(start, end, days, categories, mode, minutesPerDay){
       idx++;
     }
 
-    // 宿泊が発生する日（最終日以外）は、その日の最後を温泉にする→並べ替え後の距離を計算し直す
-    if(d < days-1 && categories.includes('onsen')){
+    // その日に温泉を訪れる場合は、なるべく一日の最後に入れる→並べ替え後の距離を計算し直す
+    if(categories.includes('onsen')){
       const onsenIdx = dayItems.findIndex(it=>it.category==='onsen');
       if(onsenIdx !== -1 && onsenIdx !== dayItems.length-1){
         const [onsen] = dayItems.splice(onsenIdx,1);
@@ -1693,15 +1722,19 @@ function renderPlanResult(dayPlans, days, start, end, mode, usedRealRoad){
       }
       dayItems.forEach(it=>{
         const color = CATEGORY_HEX[it.category];
+        const hasPhoto = !!(it.photo || getStoredPhoto(it.category, it._idx));
         dayHtml += `
           <div class="plan-travel-line">${TRANSPORT_LABEL[mode]}で ${it._travelKm.toFixed(1)}km・約${formatMinutes(it._travelMin)}</div>
           <div class="plan-spot">
             <div class="plan-spot-badge" style="background:${color}">${CATEGORY_ICON_SVG[it.category]}</div>
-            <div>
+            <div style="flex:1;">
               <div class="plan-spot-name">${it.name}</div>
               <div class="plan-spot-area">${it.area}</div>
               <div class="plan-spot-desc">${it.desc}</div>
             </div>
+            ${hasPhoto ? `<button class="icon-btn plan-photo-btn has-photo" style="background:${color}; flex-shrink:0;" data-cat="${it.category}" data-idx="${it._idx}" aria-label="写真を見る" title="写真を見る">
+              <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="18" height="13" rx="2.5" stroke="currentColor" stroke-width="2"/><path d="M8 7l1.3-2h5.4L16 7" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13.5" r="3" stroke="currentColor" stroke-width="2"/></svg>
+            </button>` : ''}
           </div>`;
       });
       if(dIdx === dayPlans.length-1){
@@ -1718,6 +1751,86 @@ function renderPlanResult(dayPlans, days, start, end, mode, usedRealRoad){
 
   planFormView.style.display = 'none';
   planResultView.style.display = '';
+}
+
+// 作成したプランを、実際の地図上にルートとして描画する
+function showPlanOnMap(){
+  if(!lastPlanRoute) return;
+  planModal.classList.remove('show');
+
+  zoomStack = [];
+  render();
+
+  requestAnimationFrame(()=>{
+    const { dayPlans, start, end, dayGeometries } = lastPlanRoute;
+    let pts = [start, end];
+    dayPlans.forEach(day=> day.forEach(it=> pts.push(it)));
+    dayGeometries.forEach(geom=>{ if(geom) pts = pts.concat(geom); });
+    const minx = Math.min(...pts.map(p=>p.x)), maxx = Math.max(...pts.map(p=>p.x));
+    const miny = Math.min(...pts.map(p=>p.y)), maxy = Math.max(...pts.map(p=>p.y));
+    applyTransform({ minx, maxx, miny, maxy }, 1.3, 6);
+
+    drawPlanRouteOverlay(lastPlanRoute);
+    document.querySelector('.map-wrap').scrollIntoView({behavior:'smooth', block:'start'});
+  });
+}
+
+function drawPlanRouteOverlay(route){
+  const layer = document.getElementById('planRouteLayer');
+  layer.innerHTML = '';
+  const { dayPlans, start, end, dayGeometries } = route;
+
+  // 実際の道路経路（赤い線）。データがない日は直線でつなぐ
+  dayPlans.forEach((dayItems, d)=>{
+    if(dayItems.length === 0) return;
+    const geom = dayGeometries[d];
+    let d_attr;
+    if(geom && geom.length > 1){
+      d_attr = geom.map((p,i)=> (i===0?'M':'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+    } else {
+      const dayStart = d===0 ? start : (dayPlans[d-1].length ? dayPlans[d-1][dayPlans[d-1].length-1] : start);
+      const isLastDay = d === dayPlans.length-1;
+      const linePts = [dayStart, ...dayItems];
+      if(isLastDay) linePts.push(end);
+      d_attr = linePts.map((p,i)=> (i===0?'M':'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+    }
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d_attr);
+    path.setAttribute('stroke', '#D64545');
+    path.setAttribute('stroke-width', '1.6');
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    path.setAttribute('vector-effect', 'non-scaling-stroke');
+    layer.appendChild(path);
+  });
+
+  // 通し番号つきのピン（起点・各スポット・終点）
+  let allStops = [{ ...start, _label: 'S' }];
+  dayPlans.forEach(day=> day.forEach(it=> allStops.push(it)));
+  allStops.push({ ...end, _label: 'G' });
+
+  allStops.forEach((p, i)=>{
+    const label = p._label || String(i);
+    const isEndpoint = p._label === 'S' || p._label === 'G';
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.setAttribute('class', 'plan-route-pin');
+    g.dataset.cx = p.x; g.dataset.cy = p.y;
+    g.innerHTML = `
+      <circle cx="${p.x}" cy="${p.y}" r="7" fill="${isEndpoint ? '#232F29' : '#D64545'}" stroke="#fff" stroke-width="1.2"/>
+      <text x="${p.x}" y="${p.y}" text-anchor="middle" dominant-baseline="central" fill="#fff" font-size="7.5" font-weight="700">${label}</text>
+    `;
+    layer.appendChild(g);
+  });
+  updatePlanRoutePinTransforms();
+}
+
+function updatePlanRoutePinTransforms(){
+  const inv = 1 / currentTransform.scale;
+  document.querySelectorAll('#planRouteLayer .plan-route-pin').forEach(g=>{
+    const cx = g.dataset.cx, cy = g.dataset.cy;
+    g.setAttribute('transform', `translate(${cx} ${cy}) scale(${inv}) translate(${-cx} ${-cy})`);
+  });
 }
 
 async function resolvePoint(addressInput, fallback){
@@ -1780,10 +1893,15 @@ planSubmit.addEventListener('click', async ()=>{
   const dayPlans = generateItinerary(start, end, days, categories, mode, minutesPerDay);
 
   let usedRealRoad = false;
+  let dayGeometries = dayPlans.map(()=>null);
   if(dayPlans.length > 0 && OSRM_BASE[mode]){
     planStatus.textContent = '道路距離を調べています…';
-    usedRealRoad = await refineWithRoadDistances(dayPlans, start, end, mode);
+    const result = await refineWithRoadDistances(dayPlans, start, end, mode);
+    usedRealRoad = result.success;
+    dayGeometries = result.dayGeometries;
   }
+
+  lastPlanRoute = { dayPlans, start, end, mode, dayGeometries };
 
   planStatus.textContent = '';
   planSubmit.disabled = false;
