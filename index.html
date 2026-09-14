@@ -502,7 +502,6 @@
       <label class="add-spot-label">移動手段</label>
       <select id="planMode" class="add-spot-input">
         <option value="car">車</option>
-        <option value="train">電車</option>
         <option value="bicycle">自転車</option>
         <option value="walk">徒歩</option>
       </select>
@@ -1490,8 +1489,8 @@ let planStartPoint = null; // {x, y, label}
 
 function euclidDist(x1,y1,x2,y2){ return Math.hypot(x1-x2, y1-y2); }
 
-const TRANSPORT_SPEED_KMH = { car: 45, train: 40, bicycle: 15, walk: 4.5 };
-const TRANSPORT_LABEL = { car: '車', train: '電車', bicycle: '自転車', walk: '徒歩' };
+const TRANSPORT_SPEED_KMH = { car: 45, bicycle: 15, walk: 4.5 };
+const TRANSPORT_LABEL = { car: '車', bicycle: '自転車', walk: '徒歩' };
 const KM_PER_UNIT = 111.32 / 90; // 地図の座標1単位あたりの実距離（km）
 const ROAD_FACTOR = 1.3;         // 直線距離→実際の道のりへのおおよその補正
 const STAY_MINUTES = { scenic: 45, food: 60, onsen: 60 };
@@ -1687,9 +1686,7 @@ function renderPlanResult(dayPlans, days, start, end, mode, usedRealRoad){
   } else {
     const noteText = usedRealRoad
       ? '※距離・時間は実際の道路経路に基づく概算です。'
-      : mode==='train'
-        ? '※電車は道路経路が使えないため、直線距離をもとにした概算です。'
-        : '※距離・時間は直線距離をもとにした概算です（道路距離の取得に失敗したため）。';
+      : '※距離・時間は直線距離をもとにした概算です（道路距離の取得に失敗したため）。';
     let html = `<div class="add-spot-status" style="margin-bottom:10px;">${noteText}</div>`;
     html += dayPlans.map((dayItems, dIdx)=>{
       const dayLabel = dayPlans.length===1 ? '当日のおすすめコース' : `${dIdx+1}日目`;
