@@ -103,6 +103,7 @@
   .plan-spot-area{ font-size:10.5px; color:#8B978F; margin-top:1px; }
   .plan-spot-desc{ font-size:11.5px; color:#57625F; margin-top:3px; line-height:1.5; }
   .plan-route-point{ font-size:12.5px; font-weight:700; color:var(--forest); padding:4px 0; }
+  #planRouteLayer .plan-route-pin{ cursor:pointer; }
   .plan-travel-line{ font-size:10.5px; color:#8B978F; padding:3px 0 3px 4px; border-left:2px dotted var(--ice); margin-left:10px; }
 
   .tabs{ display:flex; gap:6px; padding:14px 16px 10px; overflow-x:auto; }
@@ -1876,13 +1877,30 @@ function drawPlanRouteOverlay(route){
     g.innerHTML = `
       ${moved ? `<line x1="${p._origX}" y1="${p._origY}" x2="${p.x}" y2="${p.y}" stroke="#232F29" stroke-width="0.6" vector-effect="non-scaling-stroke"/>
       <circle cx="${p._origX}" cy="${p._origY}" r="1.6" fill="#232F29"/>` : ''}
-      <circle cx="${p.x}" cy="${p.y}" r="8" fill="${isEndpoint ? '#232F29' : '#D64545'}" stroke="#fff" stroke-width="1.3"/>
+      <circle class="pin-main-circle" cx="${p.x}" cy="${p.y}" r="8" fill="${isEndpoint ? '#232F29' : '#D64545'}" stroke="#fff" stroke-width="1.3"/>
       <text x="${p.x}" y="${p.y}" text-anchor="middle" dominant-baseline="central" fill="#fff" font-size="8.5" font-weight="700">${label}</text>
     `;
     layer.appendChild(g);
   });
   updatePlanRoutePinTransforms();
 }
+
+// ピンが重なっていても、タップすればそのピンだけ手前に出てきて番号が見える
+document.getElementById('planRouteLayer').addEventListener('click', (e)=>{
+  const pin = e.target.closest('.plan-route-pin');
+  if(!pin) return;
+  const layer = document.getElementById('planRouteLayer');
+  layer.appendChild(pin); // 兄弟要素の一番最後に移動＝一番手前に描画される
+  const circle = pin.querySelector('.pin-main-circle');
+  if(circle){
+    circle.setAttribute('stroke', '#F5C518');
+    circle.setAttribute('stroke-width', '2.6');
+    setTimeout(()=>{
+      circle.setAttribute('stroke', '#fff');
+      circle.setAttribute('stroke-width', '1.3');
+    }, 1600);
+  }
+});
 
 function updatePlanRoutePinTransforms(){
   const inv = 1 / currentTransform.scale;
