@@ -1743,7 +1743,7 @@ function buildGoogleMapsUrl(dayStart, dayItems, mode){
   const destination = toLL(dayItems[dayItems.length-1]);
   const waypoints = dayItems.slice(0, -1).map(toLL).join('|');
   let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=${GMAPS_MODE[mode] || 'driving'}`;
-  if(waypoints) url += `&waypoints=${encodeURIComponent(waypoints)}`;
+  if(waypoints) url += `&waypoints=${waypoints}`;
   return url;
 }
 
