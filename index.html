@@ -105,6 +105,10 @@
   .plan-route-point{ font-size:12.5px; font-weight:700; color:var(--forest); padding:4px 0; }
   #planRouteLayer .plan-route-pin{ cursor:pointer; }
   .plan-travel-line{ font-size:10.5px; color:#8B978F; padding:3px 0 3px 4px; border-left:2px dotted var(--ice); margin-left:10px; }
+  .plan-gmaps-link{
+    display:block; margin-top:10px; padding:8px 10px; border-radius:10px; background:#EEF4F6;
+    color:var(--biei-blue); font-size:11.5px; font-weight:700; text-align:center; text-decoration:none;
+  }
 
   .tabs{ display:flex; gap:6px; padding:14px 16px 10px; overflow-x:auto; }
   .tab{
@@ -1729,6 +1733,20 @@ function generateItinerary(start, end, days, categories, mode, minutesPerDay){
   return dayPlans;
 }
 
+const GMAPS_MODE = { car: 'driving', bicycle: 'bicycling', walk: 'walking' };
+
+// その日のルートをGoogleマップで開くためのURLを作る（起点→各スポット→その日の最後のスポット）
+function buildGoogleMapsUrl(dayStart, dayItems, mode){
+  if(dayItems.length === 0) return null;
+  const toLL = (p)=>{ const { lat, lon } = unprojectXY(p.x, p.y); return `${lat.toFixed(6)},${lon.toFixed(6)}`; };
+  const origin = toLL(dayStart);
+  const destination = toLL(dayItems[dayItems.length-1]);
+  const waypoints = dayItems.slice(0, -1).map(toLL).join('|');
+  let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=${GMAPS_MODE[mode] || 'driving'}`;
+  if(waypoints) url += `&waypoints=${encodeURIComponent(waypoints)}`;
+  return url;
+}
+
 function renderPlanResult(dayPlans, days, start, end, mode, usedRealRoad){
   const title = days===1 ? '日帰りプラン' : `${days-1}泊${days}日プラン`;
   document.getElementById('planResultTitle').textContent = title;
@@ -1774,6 +1792,13 @@ function renderPlanResult(dayPlans, days, start, end, mode, usedRealRoad){
           dayHtml += `<div class="plan-travel-line">${TRANSPORT_LABEL[mode]}で ${last._toEndKm.toFixed(1)}km・約${formatMinutes(last._toEndMin)}</div>`;
         }
         dayHtml += `<div class="plan-route-point">📍 ${end.label || '終点'}</div>`;
+      }
+      if(dayItems.length > 0){
+        const dayStart = dIdx===0 ? start : (dayPlans[dIdx-1].length ? dayPlans[dIdx-1][dayPlans[dIdx-1].length-1] : start);
+        const gUrl = buildGoogleMapsUrl(dayStart, dayItems, mode);
+        if(gUrl){
+          dayHtml += `<a href="${gUrl}" target="_blank" rel="noopener" class="plan-gmaps-link">🗺️ この日のルートをGoogleマップで開く</a>`;
+        }
       }
       return `<div class="plan-day"><div class="plan-day-title">${dayLabel}</div>${dayHtml}</div>`;
     }).join('');
