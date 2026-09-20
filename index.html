@@ -1735,13 +1735,20 @@ function generateItinerary(start, end, days, categories, mode, minutesPerDay){
 
 const GMAPS_MODE = { car: 'driving', bicycle: 'bicycling', walk: 'walking' };
 
+// 座標ではなく「場所の名前・住所」で渡す方が、Googleマップ側で自動的にルート検索まで進みやすい
+function pointToMapsQuery(p){
+  if(p.name) return encodeURIComponent(`${p.name} ${p.area || ''} 北海道`.trim());
+  if(p.label && p.label !== '現在地') return encodeURIComponent(p.label);
+  const { lat, lon } = unprojectXY(p.x, p.y);
+  return `${lat.toFixed(6)},${lon.toFixed(6)}`;
+}
+
 // その日のルートをGoogleマップで開くためのURLを作る（起点→各スポット→その日の最後のスポット）
 function buildGoogleMapsUrl(dayStart, dayItems, mode){
   if(dayItems.length === 0) return null;
-  const toLL = (p)=>{ const { lat, lon } = unprojectXY(p.x, p.y); return `${lat.toFixed(6)},${lon.toFixed(6)}`; };
-  const origin = toLL(dayStart);
-  const destination = toLL(dayItems[dayItems.length-1]);
-  const waypoints = dayItems.slice(0, -1).map(toLL).join('|');
+  const origin = pointToMapsQuery(dayStart);
+  const destination = pointToMapsQuery(dayItems[dayItems.length-1]);
+  const waypoints = dayItems.slice(0, -1).map(pointToMapsQuery).join('|');
   let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=${GMAPS_MODE[mode] || 'driving'}`;
   if(waypoints) url += `&waypoints=${waypoints}`;
   return url;
