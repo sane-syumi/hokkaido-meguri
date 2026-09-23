@@ -1747,22 +1747,6 @@ function generateItinerary(start, end, days, categories, mode, minutesPerDay){
       routeSpots.splice(i, 1); // 使ったスポットだけ取り除く（スキップした温泉は残る）
     }
 
-    // その日に温泉を訪れる場合は、なるべく一日の最後に入れる→並べ替え後の距離を計算し直す
-    if(categories.includes('onsen')){
-      const onsenIdx = dayItems.findIndex(it=>it.category==='onsen');
-      if(onsenIdx !== -1 && onsenIdx !== dayItems.length-1){
-        const [onsen] = dayItems.splice(onsenIdx,1);
-        dayItems.push(onsen);
-        let prevPt = d===0 ? start : (dayPlans[d-1] && dayPlans[d-1].length ? dayPlans[d-1][dayPlans[d-1].length-1] : start);
-        dayItems.forEach(it=>{
-          const km = distKm(prevPt, it);
-          it._travelKm = km;
-          it._travelMin = travelMinutes(km, mode);
-          prevPt = it;
-        });
-      }
-    }
-
     dayPlans.push(dayItems);
   }
   // 最終日の最後から終点までの距離も付与
