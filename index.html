@@ -1659,7 +1659,7 @@ document.getElementById('planUseGps').addEventListener('click', ()=>{
 });
 
 // 起点・終点から遠回りの少ないスポットを選び、起点→終点の向きに沿って並べる
-function pickRouteSpots(start, end, categories, poolSize){
+function pickRouteSpots(start, end, categories, poolSize, days){
   let candidates = [];
   categories.forEach(catKey=>{
     DATA[catKey].items.forEach((it, idx)=>{
@@ -1669,33 +1669,59 @@ function pickRouteSpots(start, end, categories, poolSize){
   if(candidates.length === 0) return [];
 
   const baseDist = euclidDist(start.x,start.y,end.x,end.y);
-  candidates.forEach(c=>{
-    c._detour = euclidDist(start.x,start.y,c.x,c.y) + euclidDist(c.x,c.y,end.x,end.y) - baseDist;
-  });
-  candidates.sort((a,b)=> a._detour - b._detour);
-  const chosen = candidates.slice(0, Math.min(poolSize, candidates.length));
+  const isLoop = baseDist < 5; // 起点と終点がほぼ同じ場所なら「周遊」とみなす
 
-  // 近い場所をまとめて回る一筆書きになるよう、最近傍法で順番を組み立てる
-  const ordered = [];
-  let cur = start;
-  const remaining = chosen.slice();
-  while(remaining.length){
-    let bestIdx = 0, bestDist = Infinity;
-    remaining.forEach((c, i)=>{
-      const d = euclidDist(cur.x, cur.y, c.x, c.y);
-      if(d < bestDist){ bestDist = d; bestIdx = i; }
+  if(!isLoop){
+    // 起点→終点の直線から大きく外れる場所は候補にしない（無理な寄り道でルートを歪めない）
+    candidates.forEach(c=>{
+      c._detour = euclidDist(start.x,start.y,c.x,c.y) + euclidDist(c.x,c.y,end.x,end.y) - baseDist;
     });
-    const next = remaining.splice(bestIdx, 1)[0];
-    ordered.push(next);
-    cur = next;
+    const maxDetour = Math.max(baseDist * 0.6, 25);
+    let pool = candidates.filter(c=> c._detour <= maxDetour);
+    pool.sort((a,b)=> a._detour - b._detour);
+    pool = pool.slice(0, poolSize);
+
+    // 起点→終点の向きに投影し、後戻りしないよう常に「前方」の候補だけをたどる一筆書きにする
+    const dx = end.x-start.x, dy = end.y-start.y;
+    const len = Math.hypot(dx,dy) || 1;
+    const ux = dx/len, uy = dy/len;
+    pool.forEach(c=>{ c._t = (c.x-start.x)*ux + (c.y-start.y)*uy; });
+
+    const ordered = [];
+    let cur = start, curT = 0;
+    let remaining = pool.slice();
+    while(remaining.length){
+      const ahead = remaining.filter(c=> c._t >= curT - 4);
+      if(ahead.length === 0) break; // 前方に進める候補がなければ、無理に後方のものを入れず打ち切る
+      let best = null, bestDist = Infinity;
+      ahead.forEach(c=>{
+        const d = euclidDist(cur.x, cur.y, c.x, c.y);
+        if(d < bestDist){ bestDist = d; best = c; }
+      });
+      ordered.push(best);
+      remaining = remaining.filter(c=>c!==best);
+      cur = best; curT = best._t;
+    }
+    return ordered;
   }
-  return ordered;
+
+  // 周遊（起点に戻る）の場合：起点からの距離で候補を絞り、角度順に並べて同じ道を往復しない一筆書きにする
+  candidates.forEach(c=>{
+    c._d = euclidDist(start.x,start.y,c.x,c.y);
+    c._angle = Math.atan2(c.y-start.y, c.x-start.x);
+  });
+  const maxRadius = Math.max(days * 40, 40);
+  let pool = candidates.filter(c=> c._d <= maxRadius);
+  pool.sort((a,b)=> a._d - b._d);
+  pool = pool.slice(0, poolSize);
+  pool.sort((a,b)=> a._angle - b._angle);
+  return pool;
 }
 
 // 日数・活動時間・移動手段をもとに、日ごとにスポットを割り振り、移動距離／時間も付与する
 function generateItinerary(start, end, days, categories, mode, minutesPerDay){
   const poolSize = minutesPerDay != null ? days*8 : days*3;
-  const routeSpots = pickRouteSpots(start, end, categories, poolSize);
+  const routeSpots = pickRouteSpots(start, end, categories, poolSize, days);
 
   const dayPlans = [];
   for(let d=0; d<days; d++){
