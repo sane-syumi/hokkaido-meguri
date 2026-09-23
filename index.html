@@ -1729,7 +1729,14 @@ function generateItinerary(start, end, days, categories, mode, minutesPerDay){
     let usedMinutes = 0;
     let cur = d===0 ? start : (dayPlans[d-1].length ? dayPlans[d-1][dayPlans[d-1].length-1] : start);
     let i = 0;
-    // まず絶景・グルメなど、温泉以外のスポットを前進しながら組み立てる（温泉は最後にまとめて検討する）
+
+    // 温泉は夕方に入るのが基本なので、その分の時間をあらかじめ確保しておく（複数日プランの最終日は対象外）
+    const isLastDay = d === days-1;
+    const allowOnsen = categories.includes('onsen') && !(days > 1 && isLastDay);
+    const onsenReserve = allowOnsen ? STAY_MINUTES.onsen + 40 : 0;
+
+    // まず絶景・グルメなど、温泉以外のスポットを前進しながら組み立てる（温泉は最後にまとめて検討する）。
+    // 1日に詰め込みすぎないよう、時間に余裕があっても最大3件までとする。
     while(i < routeSpots.length){
       const sp = routeSpots[i];
       if(sp.category === 'onsen'){ i++; continue; }
@@ -1737,18 +1744,15 @@ function generateItinerary(start, end, days, categories, mode, minutesPerDay){
       const travel = travelMinutes(km, mode);
       const stay = STAY_MINUTES[sp.category] || 45;
       // 1件目であっても、時間内に収まらないなら追加しない（歩き・自転車で遠すぎる場所を無理に入れない）
-      if(minutesPerDay != null && usedMinutes + travel + stay > minutesPerDay) break;
-      if(minutesPerDay == null && dayItems.length >= 3) break;
+      if(minutesPerDay != null && usedMinutes + travel + stay > minutesPerDay - onsenReserve) break;
+      if(dayItems.length >= 3) break;
       dayItems.push({ ...sp, _travelKm: km, _travelMin: travel });
       usedMinutes += travel + stay;
       cur = sp;
       routeSpots.splice(i, 1);
     }
 
-    // 温泉は夕方に入るのが基本なので、その日の最後に1件だけ検討する。
-    // 複数日プランの最終日は、帰宅前提のため温泉の対象にしない。
-    const isLastDay = d === days-1;
-    const allowOnsen = categories.includes('onsen') && !(days > 1 && isLastDay);
+    // 温泉をその日の最後に1件だけ検討する
     if(allowOnsen){
       let bestIdx = -1, bestDist = Infinity;
       routeSpots.forEach((sp, idx)=>{
