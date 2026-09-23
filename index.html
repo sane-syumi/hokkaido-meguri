@@ -1728,12 +1728,11 @@ function generateItinerary(start, end, days, categories, mode, minutesPerDay){
     const dayItems = [];
     let usedMinutes = 0;
     let cur = d===0 ? start : (dayPlans[d-1].length ? dayPlans[d-1][dayPlans[d-1].length-1] : start);
-    let dayHasOnsen = false;
     let i = 0;
+    // まず絶景・グルメなど、温泉以外のスポットを前進しながら組み立てる（温泉は最後にまとめて検討する）
     while(i < routeSpots.length){
       const sp = routeSpots[i];
-      // 1日1温泉まで。既にあれば消費せずスキップし、翌日以降の候補として残す
-      if(sp.category === 'onsen' && dayHasOnsen){ i++; continue; }
+      if(sp.category === 'onsen'){ i++; continue; }
       const km = distKm(cur, sp);
       const travel = travelMinutes(km, mode);
       const stay = STAY_MINUTES[sp.category] || 45;
@@ -1741,10 +1740,34 @@ function generateItinerary(start, end, days, categories, mode, minutesPerDay){
       if(minutesPerDay != null && usedMinutes + travel + stay > minutesPerDay) break;
       if(minutesPerDay == null && dayItems.length >= 3) break;
       dayItems.push({ ...sp, _travelKm: km, _travelMin: travel });
-      if(sp.category === 'onsen') dayHasOnsen = true;
       usedMinutes += travel + stay;
       cur = sp;
-      routeSpots.splice(i, 1); // 使ったスポットだけ取り除く（スキップした温泉は残る）
+      routeSpots.splice(i, 1);
+    }
+
+    // 温泉は夕方に入るのが基本なので、その日の最後に1件だけ検討する。
+    // 複数日プランの最終日は、帰宅前提のため温泉の対象にしない。
+    const isLastDay = d === days-1;
+    const allowOnsen = categories.includes('onsen') && !(days > 1 && isLastDay);
+    if(allowOnsen){
+      let bestIdx = -1, bestDist = Infinity;
+      routeSpots.forEach((sp, idx)=>{
+        if(sp.category !== 'onsen') return;
+        const dd = euclidDist(cur.x, cur.y, sp.x, sp.y);
+        if(dd < bestDist){ bestDist = dd; bestIdx = idx; }
+      });
+      if(bestIdx !== -1){
+        const sp = routeSpots[bestIdx];
+        const km = distKm(cur, sp);
+        const travel = travelMinutes(km, mode);
+        const stay = STAY_MINUTES.onsen;
+        if(minutesPerDay == null || usedMinutes + travel + stay <= minutesPerDay){
+          dayItems.push({ ...sp, _travelKm: km, _travelMin: travel });
+          usedMinutes += travel + stay;
+          cur = sp;
+          routeSpots.splice(bestIdx, 1);
+        }
+      }
     }
 
     dayPlans.push(dayItems);
